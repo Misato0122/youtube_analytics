@@ -231,6 +231,7 @@ td a:hover { text-decoration: underline; }
         <select id="small-src">
           <option value="knowledge">知識・解説系の横動画</option>
           <option value="small">いろいろなジャンル（ショート含む）</option>
+          <option value="games">建築・クラフト系ゲーム（横動画・規模問わず）</option>
         </select>
       </label>
     </div>
@@ -239,7 +240,7 @@ td a:hover { text-decoration: underline; }
     <div class="toolbar">
       <label>登録者
         <select id="small-subs">
-          <option value="5000">5000人以下</option><option value="3000">3000人以下</option><option value="1000">1000人以下</option>
+          <option value="1000000000">制限なし</option><option value="5000">5000人以下</option><option value="3000">3000人以下</option><option value="1000">1000人以下</option>
         </select>
       </label>
       <label>長さ
@@ -499,7 +500,7 @@ async function renderSmall() {
   }
   if (state.smallGenre !== 'all' && !s.genres.includes(state.smallGenre)) state.smallGenre = 'all';
   const when = new Date(s.fetchedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  $('#small-note').textContent = `${when} 時点。ジャンル別のキーワードで直近${s.days}日に公開された${s.minDuration ? Math.round(s.minDuration / 60) + '分以上の' : ''}動画を再生数の多い順に検索し（${s.searched}本）、登録者${s.maxSubs.toLocaleString()}人以下のチャンネルだけを取り出しています。` +
+  $('#small-note').textContent = `${when} 時点。ジャンル別のキーワードで直近${s.days}日に公開された${s.minDuration ? Math.round(s.minDuration / 60) + '分以上の' : ''}動画を再生数の多い順に検索し（${s.searched}本）、${s.maxSubs < 1e8 ? `登録者${s.maxSubs.toLocaleString()}人以下のチャンネルだけを取り出しています。` : ''}` +
     (s.profile === 'knowledge' ? '「切り抜き」「反応集」「海外の反応」などは除いています。投稿ペースが極端に多いチャンネルは、AIで量産している可能性があります。' : '急上昇には載らない「小さくても伸びた動画」です。');
   const maxSubs = +$('#small-subs').value, len = $('#small-len').value, g = state.smallGenre || 'all';
   let vs = s.videos.filter(v => v.subs <= maxSubs && (len === 'all' || (len === 'short') === (v.duration > 0 && v.duration <= 180)));

@@ -10,7 +10,7 @@ on:
         description: '何を集めるか'
         type: choice
         default: all
-        options: [all, trending, small, knowledge]
+        options: [all, trending, small, knowledge, games]
 
 permissions:
   contents: write
@@ -44,6 +44,11 @@ jobs:
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python3 scripts/collect_small.py --profile knowledge --max-subs 5000
+      - name: 建築・クラフト系ゲームの横動画を取得（手動実行のみ）
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'games'
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python3 scripts/collect_small.py --profile games --max-subs 1000000000
       - name: データを保存
         run: |
           git config user.name "github-actions[bot]"

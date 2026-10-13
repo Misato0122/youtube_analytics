@@ -10,7 +10,8 @@
 プロファイル:
   general    いろいろなジャンル・ショートも含む（直近7日）→ data/small/
   knowledge  解説・勉強・知識系の横動画（4分以上・直近14日）。切り抜き等を除く → data/knowledge/
-API 使用量: 検索 1 回 100 ユニット。general 約 3,000、knowledge 約 3,200
+  games      建築・スローライフ・シミュレーション/クラフト系ゲームの横動画（4分以上・直近14日）→ data/games/
+API 使用量: 検索 1 回 100 ユニット。general 約 3,000、knowledge 約 3,200、games 約 2,000
 """
 import argparse, json, os, re, sys
 from datetime import datetime, timedelta, timezone
@@ -34,12 +35,24 @@ KNOWLEDGE = [
     ('本の要約', '本 要約'), ('勉強法', '勉強法'), ('語学', '英語 勉強'), ('IT・AI', 'AI 解説|プログラミング'),
 ]
 
+# スローライフ建築・シミュレーション/クラフト系ゲーム
+GAMES = [
+    ('マイクラ建築', 'マイクラ 建築|マインクラフト 建築'), ('マイクラ', 'マイクラ|マインクラフト'),
+    ('ぽこあポケモン', 'ぽこあポケモン|ぽこポケ|ポコピア|Pokopia'), ('あつ森', 'あつ森|どうぶつの森'),
+    ('スローライフ', 'スローライフ ゲーム'), ('スターデューバレー', 'スターデューバレー|Stardew'),
+    ('Dressmaker', 'Dressmaker|ドレスメーカー'), ('シミュレーター', 'シミュレーター 実況|Simulator 実況'),
+    ('経営シミュ', '経営 シミュレーション ゲーム|お店 経営 ゲーム'), ('クラフト', 'クラフト ゲーム 実況|サバイバルクラフト'),
+]
+
 PROFILES = {
     'general': {'genres': GENRES, 'days': 7, 'pages': 2, 'durations': [None], 'min_duration': 0,
                 'exclude': None, 'dir': 'small'},
     # 切り抜き・転載・コメント読み上げなど、他人の素材が中心になりやすいものは除く
     'knowledge': {'genres': KNOWLEDGE, 'days': 14, 'pages': 1, 'durations': ['medium', 'long'], 'min_duration': 240,
                   'exclude': re.compile(r'切り抜き|切抜|反応集|名場面|海外の反応|#shorts|まとめ', re.I), 'dir': 'knowledge'},
+    # ゲームの横動画（チャンネル規模は問わない。登録者で絞るときは --max-subs）
+    'games': {'genres': GAMES, 'days': 14, 'pages': 1, 'durations': ['medium', 'long'], 'min_duration': 240,
+              'exclude': None, 'dir': 'games'},
 }
 
 
