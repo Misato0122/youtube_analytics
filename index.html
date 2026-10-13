@@ -428,17 +428,16 @@ function renderRank() {
 }
 
 // ---------- 分析 ----------
-const STOP = new Set(['公式', 'official', 'MV', 'music', 'video', 'Official', 'Video', 'the', 'The', 'feat', 'ft', 'and', 'with', 'from', 'shorts', 'Shorts', 'する', 'した', 'して', 'です', 'ます', 'これ', 'それ', 'こと', 'もの', 'さん', 'ちゃん']);
-const seg = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('ja', { granularity: 'word' }) : null;
+const STOP = new Set(['公式', 'official', 'mv', 'music', 'video', 'feat', 'ft', 'the', 'and', 'with', 'from', 'of', 'in', 'on', 'to', 'for', 'is', 'vs', 'my', 'you', 'shorts', 'full', 'ver', 'part']);
+// カタカナ・英数字・漢字のひと続きを1語として取り出す（ブラウザによる差が出ないよう自前で区切る）
+const WORD_RE = /#[^\s#]+|[\p{Script=Katakana}ー・]{2,}|[A-Za-z][A-Za-z0-9'+&.]*[A-Za-z0-9+]|\p{Script=Han}{2,}/gu;
 const wordCache = new Map();
 function titleWords(title) {
   if (wordCache.has(title)) return wordCache.get(title);
   const out = new Set();
-  for (const h of title.match(/#[^\s#]+/g) || []) out.add(h);
-  const text = title.replace(/#[^\s#]+/g, ' ');
-  const parts = seg ? [...seg.segment(text)].filter(x => x.isWordLike).map(x => x.segment) : text.split(/[\s【】「」『』()（）\[\]!！?？、。・|｜:：\/／~〜-]+/);
-  for (const w of parts) {
-    if (w.length < 2 || /^[\p{Script=Hiragana}ー]+$/u.test(w) || /^[\d.,:]+$/.test(w) || STOP.has(w)) continue;
+  for (let w of title.match(WORD_RE) || []) {
+    w = w.replace(/^・+|・+$/g, '');
+    if ([...w].length < 2 || STOP.has(w.toLowerCase())) continue;
     out.add(w);
   }
   wordCache.set(title, out);
