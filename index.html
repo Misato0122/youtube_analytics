@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>急上昇アナライザー</title>
+<meta name="description" content="YouTube の急上昇を毎日記録して分析するアプリ">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="急上昇">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f0efec;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+  --accent: #d0312d; --accent-ink: #fff;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --good: #006300; --bad: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #262624;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+    --accent: #e66767; --accent-ink: #0d0d0d;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --good: #0ca30c; --bad: #e66767;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #262624;
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+  --accent: #e66767; --accent-ink: #0d0d0d;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --good: #0ca30c; --bad: #e66767;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Hiragino Sans", "Segoe UI", "Yu Gothic UI", sans-serif;
+  padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+}
+[hidden] { display: none !important; }
+button, select, input { font: inherit; color: inherit; }
+a { color: inherit; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px 48px; }
+
+header { position: sticky; top: 0; z-index: 10; background: var(--page); border-bottom: 1px solid var(--border); padding-top: env(safe-area-inset-top, 0); margin-top: calc(-1 * env(safe-area-inset-top, 0)); }
+.bar { max-width: 1080px; margin: 0 auto; padding: 10px 16px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+h1 { font-size: 18px; margin: 0; flex: 1 1 auto; white-space: nowrap; }
+h1 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
+.datesel { display: flex; gap: 6px; align-items: center; }
+select, input[type=text], input[type=password] {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; min-height: 36px;
+}
+.btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; min-height: 36px; cursor: pointer; white-space: nowrap; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: default; }
+nav.tabs { max-width: 1080px; margin: 0 auto; padding: 8px 16px 0; display: flex; gap: 4px; overflow-x: auto; }
+nav.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 6px 12px 8px; cursor: pointer; color: var(--ink-2); white-space: nowrap; }
+nav.tabs button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.status { font-size: 12px; color: var(--muted); padding: 8px 0 0; }
+
+.chips { display: flex; gap: 6px; overflow-x: auto; padding: 12px 0 4px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+.chip[aria-pressed=true] { background: var(--ink); color: var(--page); border-color: var(--ink); }
+.chip small { color: var(--muted); margin-left: 4px; }
+.chip[aria-pressed=true] small { color: inherit; opacity: .7; }
+.toolbar { display: flex; gap: 8px; align-items: center; padding: 8px 0; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.toolbar .grow { flex: 1; }
+
+.list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.card { display: grid; grid-template-columns: 34px 132px 1fr; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px; text-decoration: none; min-width: 0; }
+.card:hover { border-color: var(--axis); }
+.rank { font-weight: 700; font-size: 18px; text-align: center; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.rank small { display: block; font-size: 11px; font-weight: 600; margin-top: 2px; }
+.up { color: var(--good); } .down { color: var(--bad); }
+.thumb { width: 132px; aspect-ratio: 16/9; border-radius: 8px; object-fit: cover; background: var(--surface-2); display: block; }
+.thumbbox { position: relative; }
+.dur { position: absolute; right: 4px; bottom: 4px; background: rgba(0,0,0,.75); color: #fff; font-size: 11px; padding: 0 4px; border-radius: 4px; font-variant-numeric: tabular-nums; }
+.info { min-width: 0; }
+.title { font-weight: 600; font-size: 14px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.meta { font-size: 12px; color: var(--ink-2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats { font-size: 12px; color: var(--ink-2); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.stats b { color: var(--ink); font-weight: 600; }
+.badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 0 5px; border-radius: 4px; margin-right: 4px; vertical-align: 1px; border: 1px solid currentColor; }
+.badge.new { color: var(--accent); }
+.badge.streak { color: var(--ink-2); }
+@media (max-width: 480px) {
+  .list { grid-template-columns: 1fr; }
+  .card { grid-template-columns: 26px 112px 1fr; gap: 8px; padding: 8px; }
+  .thumb { width: 112px; }
+  .rank { font-size: 16px; }
+}
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; min-width: 0; }
+.panel h2 { font-size: 14px; margin: 0 0 2px; }
+.panel .sub { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+.panel.wide { grid-column: 1 / -1; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.kpi .l { font-size: 12px; color: var(--ink-2); }
+.kpi .v { font-size: 24px; font-weight: 700; line-height: 1.3; }
+.kpi .d { font-size: 12px; color: var(--muted); }
+
+.hbars { display: grid; gap: 6px; }
+.hbar { display: grid; grid-template-columns: minmax(80px, 34%) 1fr 36px; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; border-radius: 6px; }
+.hbar:hover { background: var(--surface-2); }
+.hbar .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
+.hbar .t { height: 14px; }
+.hbar .f { height: 100%; background: var(--s1); border-radius: 0 4px 4px 0; min-width: 2px; }
+.hbar .c { text-align: right; font-variant-numeric: tabular-nums; }
+.words { display: flex; flex-wrap: wrap; gap: 6px; }
+.word { border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; font-size: 13px; background: var(--page); cursor: pointer; }
+.word small { color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+svg.chart { display: block; width: 100%; overflow: visible; touch-action: pan-y; }
+svg.chart text { fill: var(--muted); font-size: 11px; }
+svg.chart .grid line { stroke: var(--grid); }
+svg.chart .base { stroke: var(--axis); }
+svg.chart .label { fill: var(--ink-2); font-size: 11px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); margin-bottom: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+#tip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,.15); border-radius: 8px; padding: 6px 10px; font-size: 12px; max-width: 260px; }
+#tip b { display: block; margin-bottom: 2px; }
+#tip .row { display: flex; gap: 8px; justify-content: space-between; font-variant-numeric: tabular-nums; }
+#tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--grid); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td a { text-decoration: none; }
+td a:hover { text-decoration: underline; }
+
+.empty { text-align: center; padding: 48px 16px; color: var(--ink-2); }
+.empty h2 { color: var(--ink); font-size: 17px; }
+.form { display: grid; gap: 14px; max-width: 560px; }
+.form label { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.note { font-size: 13px; color: var(--ink-2); line-height: 1.7; }
+.note code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1><span class="dot"></span>急上昇アナライザー</h1>
+    <div class="datesel">
+      <select id="date" aria-label="表示する日付"></select>
+      <button class="btn primary" id="live" title="APIキーを使って今の急上昇を取得">今すぐ取得</button>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="rank">ランキング</button>
+    <button role="tab" data-tab="analysis">分析</button>
+    <button role="tab" data-tab="history">推移</button>
+    <button role="tab" data-tab="settings">設定</button>
+  </nav>
+</header>
+
+<main class="wrap">
+  <div class="status" id="status"></div>
+
+  <section id="tab-rank" hidden>
+    <div class="chips" id="cats"></div>
+    <div class="toolbar">
+      <span id="count"></span><span class="grow"></span>
+      <label>並び替え
+        <select id="sort">
+          <option value="rank">急上昇の順位</option>
+          <option value="vph">勢い（1時間あたり再生）</option>
+          <option value="delta">前回からの再生増</option>
+          <option value="views">再生数</option>
+          <option value="ratio">登録者比（再生÷登録者）</option>
+          <option value="like">高評価率</option>
+          <option value="fresh">新しい順</option>
+        </select>
+      </label>
+    </div>
+    <div class="list" id="list"></div>
+  </section>
+
+  <section id="tab-analysis" hidden>
+    <div class="kpis" id="kpis"></div>
+    <div class="grid">
+      <div class="panel"><h2>カテゴリ別の本数</h2><p class="sub">タップするとランキングを絞り込み</p><div class="hbars" id="catbars"></div></div>
+      <div class="panel"><h2>動画の長さ</h2><p class="sub">急上昇入りした動画の本数（目盛りは「〜分まで」）</p><div id="durchart"></div></div>
+      <div class="panel"><h2>投稿された時間帯（日本時間）</h2><p class="sub">何時に公開された動画が伸びているか</p><div id="hourchart"></div></div>
+      <div class="panel"><h2>公開からの経過時間</h2><p class="sub">急上昇に載るまでの速さの目安（目盛りは「〜まで」）</p><div id="agechart"></div></div>
+      <div class="panel wide"><h2>タイトルによく出る言葉</h2><p class="sub">何本の動画のタイトルに含まれるか。タップで絞り込み</p><div class="words" id="words"></div></div>
+      <div class="panel wide"><h2>よく使われているタグ</h2><p class="sub">何本の動画に付いているか</p><div class="words" id="tags"></div></div>
+      <div class="panel wide"><h2>急上昇に多く入っているチャンネル</h2><div id="channels"></div></div>
+    </div>
+  </section>
+
+  <section id="tab-history" hidden>
+    <div class="grid">
+      <div class="panel wide">
+        <h2 id="h-metric-title">推移</h2>
+        <div class="toolbar" style="padding-top:0">
+          <select id="metric" aria-label="指標">
+            <option value="medianViews">再生数の中央値</option>
+            <option value="newEntries">新しくランクインした本数</option>
+            <option value="shorts">3分以下の動画の本数</option>
+            <option value="medianDuration">動画の長さの中央値（分）</option>
+          </select>
+        </div>
+        <div id="metricchart"></div>
+      </div>
+      <div class="panel wide"><h2>カテゴリ別の本数の推移</h2><p class="sub">本数の多い上位4カテゴリ</p><div id="catline"></div></div>
+      <div class="panel wide"><h2>長く急上昇に残っている動画</h2><p class="sub">表示中の日付の時点で、連続して入っている日数</p><div id="longrun"></div></div>
+    </div>
+  </section>
+
+  <section id="tab-settings" hidden>
+    <div class="panel" style="margin-top:12px">
+      <div class="form">
+        <h2 style="margin:0">今すぐ取得の設定</h2>
+        <p class="note" style="margin:0">毎日のデータは自動で集めています（日本時間 7時・19時ごろ）。<br>「今すぐ取得」を使うと、この端末から最新の急上昇をその場で取得できます。そのためには YouTube Data API のキーが必要です。</p>
+        <label>YouTube Data API キー
+          <input type="password" id="apikey" autocomplete="off" placeholder="AIza...">
+        </label>
+        <label>地域
+          <select id="region">
+            <option value="JP">日本</option><option value="US">アメリカ</option><option value="KR">韓国</option>
+            <option value="TW">台湾</option><option value="GB">イギリス</option><option value="IN">インド</option>
+          </select>
+        </label>
+        <div><button class="btn primary" id="save">保存</button> <span class="note" id="saved"></span></div>
+        <p class="note" style="margin:0">キーはこの端末のブラウザの中だけに保存され、ほかには送られません（YouTube への問い合わせにだけ使います）。<br>キーは Google Cloud Console の「認証情報」で、使えるサイトをこのアプリの URL に制限しておくと安全です。</p>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="tip" hidden></div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('yta.' + k); return v === null ? d : v; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('yta.' + k, v); } catch {} },
+};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => {
+  if (n == null || isNaN(n)) return '–';
+  const a = Math.abs(n);
+  if (a >= 1e8) return (n / 1e8).toFixed(a >= 1e9 ? 0 : 1) + '億';
+  if (a >= 1e4) return (n / 1e4).toFixed(a >= 1e5 ? 0 : 1) + '万';
+  return Math.round(n).toLocaleString('ja-JP');
+};
+const fmtDur = s => {
+  if (!s) return 'LIVE';
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+};
+const ago = h => h < 1 ? Math.max(1, Math.round(h * 60)) + '分前' : h < 48 ? Math.round(h) + '時間前' : Math.round(h / 24) + '日前';
+const SERIES = ['--s1', '--s2', '--s3', '--s4'];
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+const state = { index: { days: [] }, snap: null, liveSnap: null, cat: 'all', word: null, tab: store.get('tab', 'rank') };
+
+// ---------- データ読み込み ----------
+async function getJSON(url) {
+  const r = await fetch(url, { cache: 'no-cache' });
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+async function loadIndex() {
+  try { state.index = await getJSON('data/index.json'); } catch { state.index = { days: [] }; }
+  renderDateSelect();
+}
+async function loadDate(date) {
+  if (date === 'live') { state.snap = state.liveSnap; return renderAll(); }
+  setStatus('読み込み中…');
+  try { state.snap = await getJSON('data/' + date + '.json'); }
+  catch { state.snap = null; setStatus('この日のデータを読み込めませんでした（オフラインかもしれません）'); }
+  renderAll();
+}
+function renderDateSelect() {
+  const sel = $('#date'), days = state.index.days.map(d => d.date).reverse();
+  sel.innerHTML = (state.liveSnap ? '<option value="live">今（ライブ取得）</option>' : '') +
+    days.map(d => `<option value="${d}">${d.replace(/^(\d+)-(\d+)-(\d+)$/, (_, y, m, dd) => `${+m}月${+dd}日`)}</option>`).join('');
+  sel.hidden = !sel.options.length;
+}
+
+// ---------- ライブ取得（ブラウザから直接 YouTube Data API） ----------
+async function yt(endpoint, params, key) {
+  const q = new URLSearchParams({ ...params, key });
+  const r = await fetch('https://www.googleapis.com/youtube/v3/' + endpoint + '?' + q);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error?.message || r.status);
+  return j;
+}
+const parseDur = s => {
+  const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(s || '');
+  return m ? (+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + (+m[4] || 0) : 0;
+};
+const toInt = v => v == null || v === '' ? null : +v;
+async function liveFetch() {
+  const key = store.get('apikey', ''), region = store.get('region', 'JP');
+  if (!key) { setTab('settings'); $('#apikey').focus(); setStatus('「今すぐ取得」には API キーの設定が必要です'); return; }
+  const btn = $('#live'); btn.disabled = true; setStatus('YouTube から取得中…');
+  try {
+    let items = [], token;
+    do {
+      const p = { part: 'snippet,contentDetails,statistics', chart: 'mostPopular', regionCode: region, maxResults: 50, hl: 'ja' };
+      if (token) p.pageToken = token;
+      const j = await yt('videos', p, key);
+      items = items.concat(j.items || []); token = j.nextPageToken;
+    } while (token && items.length < 200);
+    const catRes = await yt('videoCategories', { part: 'snippet', regionCode: region, hl: 'ja' }, key);
+    const categories = Object.fromEntries((catRes.items || []).map(c => [c.id, c.snippet.title]));
+    const ids = [...new Set(items.map(i => i.snippet.channelId))], subs = {};
+    for (let i = 0; i < ids.length; i += 50) {
+      const j = await yt('channels', { part: 'statistics', id: ids.slice(i, i + 50).join(',') }, key);
+      for (const c of j.items || []) subs[c.id] = c.statistics.hiddenSubscriberCount ? null : toInt(c.statistics.subscriberCount);
+    }
+    // 比較相手は、同じ地域の最新の保存データ
+    let prev = null;
+    try { const l = await getJSON('data/latest.json'); if (l.region === region) prev = l; } catch {}
+    const prevById = new Map((prev?.videos || []).map(v => [v.id, v]));
+    const videos = items.map((it, i) => {
+      const sn = it.snippet, st = it.statistics || {}, p = prevById.get(it.id), views = toInt(st.viewCount);
+      return {
+        id: it.id, rank: i + 1, title: sn.title, channelId: sn.channelId, channelTitle: sn.channelTitle,
+        categoryId: sn.categoryId, publishedAt: sn.publishedAt, duration: parseDur(it.contentDetails?.duration),
+        views, likes: toInt(st.likeCount), comments: toInt(st.commentCount), subs: subs[sn.channelId] ?? null,
+        tags: (sn.tags || []).slice(0, 15),
+        prevRank: p ? p.rank : null, days: p ? (p.days || 1) + (prev.date === jstDate() ? 0 : 1) : 1,
+        viewsDelta: p && views != null && p.views != null ? views - p.views : null,
+      };
+    });
+    state.liveSnap = { date: jstDate(), fetchedAt: new Date().toISOString(), region, categories, videos, live: true, prevDate: prev?.date };
+    renderDateSelect(); $('#date').value = 'live'; state.snap = state.liveSnap; state.cat = 'all'; state.word = null;
+    renderAll();
+  } catch (e) {
+    setStatus('取得できませんでした：' + e.message);
+  } finally { btn.disabled = false; }
+}
+const jstDate = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+
+// ---------- 共通 ----------
+function setStatus(t) { $('#status').textContent = t; }
+function setTab(t) {
+  state.tab = t; store.set('tab', t);
+  document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
+  document.querySelectorAll('main > section').forEach(s => s.hidden = s.id !== 'tab-' + t);
+  renderTab();
+}
+function enrich(snap) {
+  const t = new Date(snap.fetchedAt).getTime();
+  for (const v of snap.videos) {
+    v.hours = Math.max((t - new Date(v.publishedAt).getTime()) / 3600e3, 0.1);
+    v.vph = v.views != null ? v.views / Math.max(v.hours, 1) : null;
+    v.likeRate = v.views && v.likes != null ? v.likes / v.views : null;
+    v.ratio = v.views != null && v.subs ? v.views / v.subs : null;
+  }
+}
+const catName = (snap, id) => snap.categories?.[id] || state.index.categories?.[id] || 'カテゴリ' + id;
+const hasHistory = snap => snap.videos.some(v => v.prevRank != null);
+
+function renderAll() {
+  const s = state.snap;
+  if (s) {
+    enrich(s);
+    const when = new Date(s.fetchedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    setStatus(`${s.live ? 'ライブ取得' : '保存データ'}・${when} 時点・地域 ${s.region}・${s.videos.length} 本` + (s.live && s.prevDate ? `（比較は ${s.prevDate} の保存データ）` : ''));
+  }
+  renderTab();
+}
+function emptyState(el) {
+  el.innerHTML = `<div class="empty"><h2>まだデータがありません</h2><p>毎日の自動収集が始まると、ここに急上昇が表示されます。<br>今すぐ見たいときは「設定」で API キーを入れて「今すぐ取得」を押してください。</p></div>`;
+}
+function renderTab() {
+  const t = state.tab;
+  if (t === 'settings') return;
+  if (t === 'history') return renderHistory();
+  const s = state.snap, el = $('#tab-' + t);
+  if (!s) { if (!el.querySelector('.empty')) { el.dataset.html ??= el.innerHTML; emptyState(el); } return; }
+  if (el.dataset.html) { el.innerHTML = el.dataset.html; delete el.dataset.html; bindTabControls(); }
+  t === 'rank' ? renderRank() : renderAnalysis();
+}
+
+// ---------- ランキング ----------
+function filtered() {
+  let vs = state.snap.videos;
+  if (state.cat !== 'all') vs = vs.filter(v => v.categoryId === state.cat);
+  if (state.word) vs = vs.filter(v => titleWords(v.title).has(state.word) || v.tags.includes(state.word));
+  return vs;
+}
+function renderRank() {
+  const s = state.snap, counts = {};
+  s.videos.forEach(v => counts[v.categoryId] = (counts[v.categoryId] || 0) + 1);
+  const cats = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  $('#cats').innerHTML = `<button class="chip" data-cat="all" aria-pressed="${state.cat === 'all'}">すべて<small>${s.videos.length}</small></button>` +
+    (state.word ? `<button class="chip" data-word="" aria-pressed="true">「${esc(state.word)}」✕</button>` : '') +
+    cats.map(([id, n]) => `<button class="chip" data-cat="${esc(id)}" aria-pressed="${state.cat === id}">${esc(catName(s, id))}<small>${n}</small></button>`).join('');
+  const key = $('#sort').value, hist = hasHistory(s);
+  const by = { rank: v => -v.rank, vph: v => v.vph, delta: v => v.viewsDelta, views: v => v.views, ratio: v => v.ratio, like: v => v.likeRate, fresh: v => -v.hours }[key];
+  const vs = filtered().slice().sort((a, b) => (by(b) ?? -Infinity) - (by(a) ?? -Infinity));
+  $('#count').textContent = `${vs.length} 本`;
+  $('#list').innerHTML = vs.map(v => {
+    let move = '';
+    if (hist) move = v.prevRank == null ? '' : v.prevRank > v.rank ? `<small class="up">↑${v.prevRank - v.rank}</small>` : v.prevRank < v.rank ? `<small class="down">↓${v.rank - v.prevRank}</small>` : '<small style="color:var(--muted)">→</small>';
+    const badges = (hist && v.prevRank == null ? '<span class="badge new">NEW</span>' : '') + (v.days > 1 ? `<span class="badge streak">${v.days}日連続</span>` : '');
+    return `<a class="card" href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener">
+      <div class="rank">${v.rank}${move}</div>
+      <div class="thumbbox"><img class="thumb" loading="lazy" alt="" src="https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg"><span class="dur">${fmtDur(v.duration)}</span></div>
+      <div class="info">
+        <div class="title">${badges}${esc(v.title)}</div>
+        <div class="meta">${esc(v.channelTitle)} · ${esc(catName(s, v.categoryId))} · ${ago(v.hours)}</div>
+        <div class="stats"><span>再生 <b>${fmt(v.views)}</b></span><span>勢い <b>${fmt(v.vph)}</b>/時</span>${v.viewsDelta != null ? `<span>前回比 <b>${v.viewsDelta >= 0 ? '+' : ''}${fmt(v.viewsDelta)}</b></span>` : ''}${v.likeRate != null ? `<span>高評価 <b>${(v.likeRate * 100).toFixed(1)}%</b></span>` : ''}${v.ratio != null ? `<span>登録者比 <b>${v.ratio < 10 ? v.ratio.toFixed(1) : fmt(v.ratio)}倍</b></span>` : ''}</div>
+      </div></a>`;
+  }).join('') || '<div class="empty">該当する動画がありません</div>';
+}
+
+// ---------- 分析 ----------
+const STOP = new Set(['公式', 'official', 'MV', 'music', 'video', 'Official', 'Video', 'the', 'The', 'feat', 'ft', 'and', 'with', 'from', 'shorts', 'Shorts', 'する', 'した', 'して', 'です', 'ます', 'これ', 'それ', 'こと', 'もの', 'さん', 'ちゃん']);
+const seg = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('ja', { granularity: 'word' }) : null;
+const wordCache = new Map();
+function titleWords(title) {
+  if (wordCache.has(title)) return wordCache.get(title);
+  const out = new Set();
+  for (const h of title.match(/#[^\s#]+/g) || []) out.add(h);
+  const text = title.replace(/#[^\s#]+/g, ' ');
+  const parts = seg ? [...seg.segment(text)].filter(x => x.isWordLike).map(x => x.segment) : text.split(/[\s【】「」『』()（）\[\]!！?？、。・|｜:：\/／~〜-]+/);
+  for (const w of parts) {
+    if (w.length < 2 || /^[\p{Script=Hiragana}ー]+$/u.test(w) || /^[\d.,:]+$/.test(w) || STOP.has(w)) continue;
+    out.add(w);
+  }
+  wordCache.set(title, out);
+  return out;
+}
+function topCounts(lists, n) {
+  const c = new Map();
+  for (const l of lists) for (const w of l) c.set(w, (c.get(w) || 0) + 1);
+  return [...c].filter(([, k]) => k >= 2).sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+const median = a => { const s = a.filter(x => x != null).sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
+
+function renderAnalysis() {
+  const s = state.snap, vs = s.videos, hist = hasHistory(s);
+  const shorts = vs.filter(v => v.duration > 0 && v.duration <= 180).length;
+  const kpi = (l, v, d) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="d">${d || '&nbsp;'}</div></div>`;
+  $('#kpis').innerHTML =
+    kpi('再生数の中央値', fmt(median(vs.map(v => v.views))), '急上昇に載っている動画') +
+    kpi('勢いの中央値', fmt(median(vs.map(v => v.vph))) + '<small style="font-size:14px">/時</small>', '公開からの1時間あたり再生') +
+    kpi('新しくランクイン', hist ? vs.filter(v => v.prevRank == null).length + '本' : '–', hist ? '前回のデータになかった動画' : '比較できる前回データなし') +
+    kpi('3分以下の動画', shorts + '本', Math.round(shorts / vs.length * 100) + '%（ショートを含む）');
+
+  const counts = {};
+  vs.forEach(v => counts[v.categoryId] = (counts[v.categoryId] || 0) + 1);
+  const cats = Object.entries(counts).sort((a, b) => b[1] - a[1]), max = cats[0]?.[1] || 1;
+  $('#catbars').innerHTML = cats.map(([id, n]) => `<div class="hbar" data-cat="${esc(id)}" role="button" tabindex="0"><span class="n">${esc(catName(s, id))}</span><span class="t"><span class="f" style="width:${n / max * 100}%;display:block"></span></span><span class="c">${n}</span></div>`).join('');
+
+  const durB = [['LIVE', 'ライブ・配信中など', 0, 0], ['1分', '1分以下', 0, 60], ['3分', '1〜3分', 60, 180], ['10分', '3〜10分', 180, 600], ['20分', '10〜20分', 600, 1200], ['60分', '20〜60分', 1200, 3600], ['60分超', '1時間超', 3600, Infinity]];
+  barChart($('#durchart'), durB.map(([l, t, a, b]) => ({ label: l, tip: t, value: vs.filter(v => b ? v.duration > a && v.duration <= b : !v.duration).length })), '本');
+
+  const hours = Array.from({ length: 24 }, (_, h) => ({ label: String(h), tip: h + '時台', value: 0 }));
+  vs.forEach(v => { if (v.publishedAt) hours[(new Date(v.publishedAt).getUTCHours() + 9) % 24].value++; });
+  barChart($('#hourchart'), hours, '本');
+
+  const ageB = [['6時間', '6時間以内', 0, 6], ['12時間', '6〜12時間', 6, 12], ['1日', '12〜24時間', 12, 24], ['2日', '1〜2日', 24, 48], ['4日', '2〜4日', 48, 96], ['7日', '4〜7日', 96, 168], ['7日超', '1週間超', 168, Infinity]];
+  barChart($('#agechart'), ageB.map(([l, t, a, b]) => ({ label: l, tip: t, value: vs.filter(v => v.hours > a && v.hours <= b).length })), '本');
+
+  const wordChips = list => list.map(([w, n]) => `<button class="word" data-word="${esc(w)}">${esc(w)}<small>${n}</small></button>`).join('') || '<span class="note">2本以上に共通する言葉はありません</span>';
+  $('#words').innerHTML = wordChips(topCounts(vs.map(v => titleWords(v.title)), 40));
+  $('#tags').innerHTML = wordChips(topCounts(vs.map(v => new Set(v.tags)), 30));
+
+  const ch = new Map();
+  vs.forEach(v => { const c = ch.get(v.channelId) || { name: v.channelTitle, n: 0, views: 0, subs: v.subs, best: v.rank }; c.n++; c.views += v.views || 0; c.best = Math.min(c.best, v.rank); ch.set(v.channelId, c); });
+  const top = [...ch.entries()].sort((a, b) => b[1].n - a[1].n || a[1].best - b[1].best).slice(0, 10);
+  $('#channels').innerHTML = `<table><thead><tr><th>チャンネル</th><th class="num">本数</th><th class="num">最高順位</th><th class="num">合計再生</th><th class="num">登録者</th></tr></thead><tbody>` +
+    top.map(([id, c]) => `<tr><td><a href="https://www.youtube.com/channel/${esc(id)}" target="_blank" rel="noopener">${esc(c.name)}</a></td><td class="num">${c.n}</td><td class="num">${c.best}位</td><td class="num">${fmt(c.views)}</td><td class="num">${fmt(c.subs)}</td></tr>`).join('') + '</tbody></table>';
+}
+
+// ---------- 推移 ----------
+function renderHistory() {
+  const days = state.index.days;
+  const el = $('#tab-history');
+  if (days.length < 2) {
+    if (!el.querySelector('.empty')) { el.dataset.html ??= el.innerHTML; }
+    el.innerHTML = `<div class="empty"><h2>推移を見るには2日分以上のデータが必要です</h2><p>今は ${days.length} 日分です。毎日自動で集めているので、明日以降に表示されます。</p></div>`;
+    return;
+  }
+  if (el.dataset.html) { el.innerHTML = el.dataset.html; delete el.dataset.html; bindTabControls(); }
+  const m = $('#metric').value, label = $('#metric').selectedOptions[0].textContent;
+  $('#h-metric-title').textContent = label + 'の推移';
+  const xs = days.map(d => d.date);
+  const val = d => m === 'medianDuration' ? (d.medianDuration != null ? d.medianDuration / 60 : null) : d[m];
+  lineChart($('#metricchart'), xs, [{ name: label, color: '--s1', values: days.map(val) }], m === 'medianDuration' ? v => v.toFixed(1) + '分' : m === 'medianViews' ? fmt : v => v + '本');
+
+  const total = {};
+  days.forEach(d => Object.entries(d.categories || {}).forEach(([id, n]) => total[id] = (total[id] || 0) + n));
+  const top = Object.entries(total).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([id]) => id);
+  const name = id => state.index.categories?.[id] || 'カテゴリ' + id;
+  lineChart($('#catline'), xs, top.map((id, i) => ({ name: name(id), color: SERIES[i], values: days.map(d => d.categories?.[id] || 0) })), v => v + '本');
+
+  const s = state.snap;
+  if (!s) { $('#longrun').innerHTML = '<p class="note">データがありません</p>'; return; }
+  enrich(s);
+  const long = s.videos.filter(v => v.days > 1).sort((a, b) => b.days - a.days || a.rank - b.rank).slice(0, 15);
+  $('#longrun').innerHTML = long.length ? `<table><thead><tr><th>動画</th><th class="num">連続</th><th class="num">順位</th><th class="num">再生</th></tr></thead><tbody>` +
+    long.map(v => `<tr><td><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener">${esc(v.title)}</a><div class="meta">${esc(v.channelTitle)}</div></td><td class="num">${v.days}日</td><td class="num">${v.rank}位</td><td class="num">${fmt(v.views)}</td></tr>`).join('') + '</tbody></table>'
+    : '<p class="note">2日以上続けて入っている動画はまだありません</p>';
+}
+
+// ---------- グラフ（SVG） ----------
+const tip = $('#tip');
+function showTip(e, html) {
+  tip.innerHTML = html; tip.hidden = false;
+  const r = tip.getBoundingClientRect(), x = e.clientX + 14, y = e.clientY + 14;
+  tip.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
+  tip.style.top = (y + r.height > innerHeight - 8 ? e.clientY - r.height - 10 : y) + 'px';
+}
+const hideTip = () => tip.hidden = true;
+// 目盛りがきりのよい数になるよう、上限と間隔を決める
+const niceScale = (v, ticks, integer = true) => {
+  const raw = Math.max(v, 1e-9) / ticks, p = 10 ** Math.floor(Math.log10(raw)), n = raw / p;
+  let step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
+  if (integer) step = Math.max(1, Math.round(step));
+  return { step, top: Math.max(step, Math.ceil(v / step) * step) };
+};
+
+function barChart(el, data, unit, labelEvery = 1) {
+  const W = Math.max(el.clientWidth, 260), H = 170, L = 28, B = 22, T = 8;
+  const { step: ts, top: max } = niceScale(Math.max(...data.map(d => d.value)), 3), bw = (W - L) / data.length, gap = Math.min(4, bw * .25);
+  // ラベルが重ならないよう、入りきらなければ間引く
+  const lw = Math.max(...data.map(d => [...d.label].length)) * 11 + 4;
+  labelEvery = Math.max(labelEvery, Math.ceil(lw / bw));
+  const y = v => T + (H - T - B) * (1 - v / max);
+  let g = '<g class="grid">';
+  for (let v = 0; v <= max; v += ts) g += `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${fmt(v)}</text>`;
+  g += '</g>';
+  const bars = data.map((d, i) => {
+    const x = L + i * bw + gap / 2, w = bw - gap, h = H - B - y(d.value), r = Math.min(4, w / 2, h);
+    const path = h > 0 ? `M${x},${H - B}V${y(d.value) + r}q0,-${r} ${r},-${r}h${w - 2 * r}q${r},0 ${r},${r}V${H - B}Z` : '';
+    return `<g data-i="${i}"><rect x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent"/>${path ? `<path d="${path}" fill="var(--s1)"/>` : ''}` +
+      (i % labelEvery === 0 ? `<text x="${x + w / 2}" y="${H - 6}" text-anchor="middle">${esc(d.label)}</text>` : '') + '</g>';
+  }).join('');
+  el.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${esc(data.map(d => (d.tip || d.label) + ' ' + d.value + unit).join('、'))}">${g}<line class="base" x1="${L}" x2="${W}" y1="${H - B}" y2="${H - B}"/>${bars}</svg>`;
+  el.querySelectorAll('g[data-i]').forEach(n => {
+    const d = data[n.dataset.i];
+    const show = e => { n.querySelector('path')?.setAttribute('fill-opacity', '.75'); showTip(e, `<b>${esc(d.tip || d.label)}</b>${d.value}${unit}`); };
+    n.addEventListener('pointermove', show); n.addEventListener('pointerdown', show);
+    n.addEventListener('pointerleave', () => { n.querySelector('path')?.removeAttribute('fill-opacity'); hideTip(); });
+  });
+}
+
+function lineChart(el, xs, series, f) {
+  const W = Math.max(el.clientWidth, 260), H = 220, L = 44, R = series.length > 1 ? 92 : 12, B = 22, T = 10;
+  const all = series.flatMap(s => s.values).filter(v => v != null);
+  const { step: ts, top: max } = niceScale(Math.max(...all, 0), 3, all.every(Number.isInteger)), n = xs.length;
+  const x = i => L + (W - L - R) * (n === 1 ? .5 : i / (n - 1)), y = v => T + (H - T - B) * (1 - v / max);
+  let g = '<g class="grid">';
+  for (let v = 0; v <= max + ts / 2; v += ts) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${f(v)}</text>`;
+  g += '</g>';
+  const step = Math.ceil(n / Math.max(2, Math.floor((W - L - R) / 56)));
+  const md = d => d.slice(5).replace(/^0/, '').replace('-0', '/').replace('-', '/');
+  const xl = xs.map((d, i) => (i % step === 0 || i === n - 1) && !(i !== n - 1 && n - 1 - i < step) ? `<text x="${x(i)}" y="${H - 6}" text-anchor="middle">${md(d)}</text>` : '').join('');
+  const lines = series.map(s => {
+    let d = '', pen = false;
+    s.values.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + x(i) + ',' + y(v); pen = true; });
+    const last = s.values.map((v, i) => [v, i]).filter(([v]) => v != null).pop();
+    return `<path d="${d}" fill="none" stroke="var(${s.color})" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` +
+      (last ? `<circle cx="${x(last[1])}" cy="${y(last[0])}" r="4" fill="var(${s.color})" stroke="var(--surface)" stroke-width="2"/>` : '');
+  }).join('');
+  // 右端の直接ラベル（重ならないようにずらす）
+  let labels = '';
+  if (series.length > 1) {
+    const pos = series.map((s, k) => ({ k, y: y(s.values[n - 1] ?? 0) })).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < pos.length; i++) pos[i].y = Math.max(pos[i].y, pos[i - 1].y + 14);
+    labels = pos.map(p => `<text class="label" x="${W - R + 8}" y="${p.y + 4}">${esc(series[p.k].name.slice(0, 7))}</text>`).join('');
+  }
+  const legend = series.length > 1 ? `<div class="legend">${series.map(s => `<span><i style="background:var(${s.color})"></i>${esc(s.name)}</span>`).join('')}</div>` : '';
+  el.innerHTML = legend + `<svg class="chart" viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${esc(series.map(s => s.name).join('、'))}の推移">${g}<line class="base" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>${xl}${lines}${labels}<line class="cross" y1="${T}" y2="${H - B}" stroke="var(--axis)" visibility="hidden"/><rect class="hit" x="${L - 10}" y="0" width="${W - L - R + 20}" height="${H}" fill="transparent"/></svg>`;
+  const svg = el.querySelector('svg'), cross = svg.querySelector('.cross');
+  const move = e => {
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(n - 1, Math.round(n === 1 ? 0 : (px - L) / (W - L - R) * (n - 1))));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+    showTip(e, `<b>${xs[i]}</b>` + series.map(s => `<div class="row"><span><i style="background:var(${s.color})"></i>${esc(s.name)}</span><span>${s.values[i] == null ? '–' : f(s.values[i])}</span></div>`).join(''));
+  };
+  svg.addEventListener('pointermove', move); svg.addEventListener('pointerdown', move);
+  svg.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); hideTip(); });
+}
+
+// ---------- イベント ----------
+function bindTabControls() {
+  $('#sort') && ($('#sort').onchange = () => { store.set('sort', $('#sort').value); renderRank(); });
+  $('#metric') && ($('#metric').onchange = renderHistory);
+  if ($('#sort')) $('#sort').value = store.get('sort', 'rank');
+}
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-cat]');
+  if (c) { state.cat = c.dataset.cat; if (state.tab !== 'rank') setTab('rank'); else renderRank(); return; }
+  const w = e.target.closest('[data-word]');
+  if (w) { state.word = w.dataset.word || null; if (state.word) state.cat = 'all'; if (state.tab !== 'rank') setTab('rank'); else renderRank(); scrollTo(0, 0); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('.hbar')) e.target.click(); });
+document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+$('#date').onchange = () => { state.cat = 'all'; state.word = null; loadDate($('#date').value); };
+$('#live').onclick = liveFetch;
+$('#save').onclick = () => {
+  store.set('apikey', $('#apikey').value.trim()); store.set('region', $('#region').value);
+  $('#saved').textContent = '保存しました';
+  setTimeout(() => $('#saved').textContent = '', 2000);
+};
+$('#apikey').value = store.get('apikey', ''); $('#region').value = store.get('region', 'JP');
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(renderTab, 200); });
+document.addEventListener('scroll', hideTip, { passive: true });
+
+(async () => {
+  bindTabControls();
+  setTab(['rank', 'analysis', 'history', 'settings'].includes(state.tab) ? state.tab : 'rank');
+  await loadIndex();
+  const last = state.index.days.at(-1)?.date;
+  if (last) await loadDate(last);
+  else { setStatus(''); renderTab(); }
+})();
+
+if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+</script>
+</body>
+</html>
