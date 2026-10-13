@@ -145,6 +145,34 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 td a { text-decoration: none; }
 td a:hover { text-decoration: underline; }
 
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { background: var(--surface); border: 0; padding: 6px 12px; min-height: 36px; cursor: pointer; color: var(--ink-2); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed=true] { background: var(--ink); color: var(--page); font-weight: 600; }
+.insights { margin: 0; padding-left: 1.2em; line-height: 1.8; }
+.insights li + li { margin-top: 4px; }
+.insights b { color: var(--ink); }
+tr[data-sgenre] { cursor: pointer; }
+tr[data-sgenre]:hover td { background: var(--surface-2); }
+.tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--border); color: var(--ink-2); margin: 2px 4px 0 0; white-space: nowrap; }
+.tag.good { color: var(--good); border-color: currentColor; }
+.tag.warn { color: var(--bad); border-color: currentColor; }
+.ex { font-size: 13px; line-height: 1.5; margin: 6px 0 0; padding-left: 1.1em; }
+.ex li + li { margin-top: 4px; }
+.ex a { text-decoration: none; } .ex a:hover { text-decoration: underline; }
+.ex small, td small { color: var(--muted); }
+.scroll { overflow-x: auto; }
+.rating { font-weight: 700; }
+@media (max-width: 600px) {
+  .chantable thead { display: none; }
+  .chantable tr { display: grid; grid-template-columns: 1fr repeat(3, auto); gap: 0 10px; padding: 8px 0; border-bottom: 1px solid var(--grid); }
+  .chantable td { border: 0; padding: 2px 0; }
+  .chantable td.num::before { display: block; font-size: 10px; color: var(--muted); }
+  .chantable td:nth-child(2)::before { content: "登録者"; }
+  .chantable td:nth-child(3)::before { content: "再生"; }
+  .chantable td:nth-child(4)::before { content: "動画数"; }
+  .chantable td:last-child { grid-column: 1 / -1; }
+}
 .empty { text-align: center; padding: 48px 16px; color: var(--ink-2); }
 .empty h2 { color: var(--ink); font-size: 17px; }
 .form { display: grid; gap: 14px; max-width: 560px; }
@@ -230,17 +258,21 @@ td a:hover { text-decoration: underline; }
       <label>対象
         <select id="small-src">
           <option value="knowledge">知識・解説系の横動画</option>
+          <option value="games">建築・クラフト系ゲームの横動画</option>
           <option value="small">いろいろなジャンル（ショート含む）</option>
-          <option value="games">建築・クラフト系ゲーム（横動画・規模問わず）</option>
         </select>
       </label>
+      <span class="grow"></span>
+      <div class="seg" role="group" aria-label="表示">
+        <button data-view="report" aria-pressed="true">分析レポート</button><button data-view="list" aria-pressed="false">動画一覧</button>
+      </div>
     </div>
     <p class="note" id="small-note" style="margin:0"></p>
     <div class="chips" id="small-genres"></div>
     <div class="toolbar">
       <label>登録者
         <select id="small-subs">
-          <option value="1000000000">制限なし</option><option value="5000">5000人以下</option><option value="3000">3000人以下</option><option value="1000">1000人以下</option>
+          <option value="1000000000">制限なし</option><option value="10000">1万人以下</option><option value="5000">5000人以下</option><option value="1000">1000人以下</option>
         </select>
       </label>
       <label>長さ
@@ -248,9 +280,14 @@ td a:hover { text-decoration: underline; }
           <option value="all">すべて</option><option value="short">3分以下</option><option value="long">3分超</option>
         </select>
       </label>
+      <label>言語
+        <select id="small-lang">
+          <option value="ja">日本語の動画</option><option value="all">すべて</option>
+        </select>
+      </label>
       <span class="grow"></span>
       <span id="small-count"></span>
-      <label>並び替え
+      <label data-only="list">並び替え
         <select id="small-sort">
           <option value="ratio">登録者比（再生÷登録者）</option>
           <option value="views">再生数</option>
@@ -260,10 +297,8 @@ td a:hover { text-decoration: underline; }
         </select>
       </label>
     </div>
-    <div class="list" id="small-list"></div>
-    <div class="grid">
-      <div class="panel wide"><h2>伸びている小規模動画のタイトルによく出る言葉</h2><p class="sub">絞り込み中の動画が対象。何本のタイトルに含まれるか</p><div class="words" id="small-words"></div></div>
-    </div>
+    <div id="small-report"></div>
+    <div class="list" id="small-list" hidden></div>
   </section>
 
   <section id="tab-settings" hidden>
@@ -480,41 +515,69 @@ const age = iso => {
   return m < 1 ? '開設1か月未満' : m < 12 ? `開設${Math.floor(m)}か月` : `開設${Math.floor(m / 12)}年`;
 };
 const smallData = {};
-// チャンネル開設からの平均投稿ペース（週あたり）
+// チャンネル開設からの平均投稿本数（週あたり）
+const weeklyPace = v => !v.channelCreatedAt || v.channelVideos == null ? null
+  : v.channelVideos / Math.max((Date.now() - new Date(v.channelCreatedAt).getTime()) / (7 * 86400e3), 1);
 const pace = v => {
-  if (!v.channelCreatedAt || v.channelVideos == null) return '';
-  const w = Math.max((Date.now() - new Date(v.channelCreatedAt).getTime()) / (7 * 86400e3), 1), n = v.channelVideos / w;
-  return n >= 1 ? `週${n.toFixed(n < 10 ? 1 : 0)}本ペース` : `月${(n * 4.3).toFixed(1)}本ペース`;
+  const n = weeklyPace(v);
+  return n == null ? '' : n >= 1 ? `週${n.toFixed(n < 10 ? 1 : 0)}本ペース` : `月${(n * 4.3).toFixed(1)}本ペース`;
 };
+const isJa = v => /[぀-ヿ]/.test(v.title);
+const SMALL_LINE = 10000;  // 「小さいチャンネル」とみなす登録者数
+// タイトル（とチャンネル名）から読み取る動画の型
+const PATTERNS = [
+  ['建築・作ってみた', /作ってみた|作った|作る|作り方|建築|再現|街づくり|島クリ|レイアウト|お披露目|模様替え|リフォーム/],
+  ['攻略・コツ・小ネタ', /攻略|小ネタ|検証|コツ|やるべき|ガイド|方法|知らない|知って|裏技|初心者/],
+  ['解説', /解説|わかりやすく|徹底/],
+  ['なぜ・本当の理由', /なぜ|本当の理由|理由|正体|真相|真実/],
+  ['◯選・おすすめ', /\d+選|おすすめ|ランキング|TOP\s?\d/i],
+  ['初見・新作・レビュー', /初見|新作|発売|レビュー|感想|正直|買って/],
+  ['ゆっくり・合成音声', /ゆっくり|ずんだ|VOICEROID|ボイロ|きりたん|つむぎ|琴葉/i],
+  ['VTuber', /ホロライブ|にじさんじ|VTuber|ぶいすぽ|新人V/i],
+  ['切り抜き', /切り抜き|切抜|ダイジェスト/],
+];
+const patternsOf = v => PATTERNS.filter(([, re]) => re.test(v.title + ' ' + v.channelTitle)).map(([n]) => n);
+// 名乗っている肩書き・運営元からオリジナルの作り手らしさを見る
+const EXPERT_RE = /医師|医者|講師|塾|編集部|教授|研究者|研究所|監修|税理士|弁護士|看護師|薬剤師|教員|教師|元.{0,8}(エンジニア|記者|教師|社員|職員)|大学院|学芸員/;
+const LEN_BUCKETS = [['〜3分', 0, 180], ['3〜10分', 180, 600], ['10〜20分', 600, 1200], ['20〜30分', 1200, 1800], ['30〜60分', 1800, 3600], ['60分超', 3600, Infinity]];
+
+let smallView = 'report';
 async function renderSmall() {
   const src = $('#small-src').value;
   if (!(src in smallData)) {
     $('#small-note').textContent = '読み込み中…';
-    $('#small-list').innerHTML = $('#small-genres').innerHTML = $('#small-words').innerHTML = '';
+    $('#small-list').innerHTML = $('#small-genres').innerHTML = $('#small-report').innerHTML = '';
     smallData[src] = getJSON(`data/${src}/latest.json`).then(d => (enrich(d), d)).catch(() => null);
   }
   const s = await smallData[src];
   if ($('#small-src').value !== src) return;
   if (!s) {
     $('#small-note').innerHTML = 'まだデータがありません。毎朝7時ごろに自動で集めます。';
-    $('#small-list').innerHTML = $('#small-genres').innerHTML = $('#small-words').innerHTML = '';
+    $('#small-list').innerHTML = $('#small-genres').innerHTML = $('#small-report').innerHTML = '';
     return;
   }
   if (state.smallGenre !== 'all' && !s.genres.includes(state.smallGenre)) state.smallGenre = 'all';
   const when = new Date(s.fetchedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   $('#small-note').textContent = `${when} 時点。ジャンル別のキーワードで直近${s.days}日に公開された${s.minDuration ? Math.round(s.minDuration / 60) + '分以上の' : ''}動画を再生数の多い順に検索し（${s.searched}本）、${s.maxSubs < 1e8 ? `登録者${s.maxSubs.toLocaleString()}人以下のチャンネルだけを取り出しています。` : ''}` +
-    ({ knowledge: '「切り抜き」「反応集」「海外の反応」などは除いています。投稿ペースが極端に多いチャンネルは、AIで量産している可能性があります。', games: '大手も含みます。登録者で絞り込めます。' }[s.profile] ?? '急上昇には載らない「小さくても伸びた動画」です。');
-  const maxSubs = +$('#small-subs').value, len = $('#small-len').value, g = state.smallGenre || 'all';
-  let vs = s.videos.filter(v => v.subs <= maxSubs && (len === 'all' || (len === 'short') === (v.duration > 0 && v.duration <= 180)));
+    ({ knowledge: '「切り抜き」「反応集」「海外の反応」などは除いています。', games: '大手も含めて集め、登録者1万人以下を「小さいチャンネル」として比べています。' }[s.profile] ?? '急上昇には載らない「小さくても伸びた動画」です。');
+  const maxSubs = +$('#small-subs').value, len = $('#small-len').value, lang = $('#small-lang').value, g = state.smallGenre || 'all';
+  const base = s.videos.filter(v => v.subs <= maxSubs && (lang === 'all' || isJa(v)) && (len === 'all' || (len === 'short') === (v.duration > 0 && v.duration <= 180)));
   const counts = {};
-  vs.forEach(v => v.genres.forEach(x => counts[x] = (counts[x] || 0) + 1));
-  $('#small-genres').innerHTML = `<button class="chip" data-sgenre="all" aria-pressed="${g === 'all'}">すべて<small>${vs.length}</small></button>` +
+  base.forEach(v => v.genres.forEach(x => counts[x] = (counts[x] || 0) + 1));
+  $('#small-genres').innerHTML = `<button class="chip" data-sgenre="all" aria-pressed="${g === 'all'}">すべて<small>${base.length}</small></button>` +
     s.genres.filter(x => counts[x]).map(x => `<button class="chip" data-sgenre="${esc(x)}" aria-pressed="${g === x}">${esc(x)}<small>${counts[x]}</small></button>`).join('');
-  if (g !== 'all') vs = vs.filter(v => v.genres.includes(g));
+  const vs = g === 'all' ? base : base.filter(v => v.genres.includes(g));
+  $('#small-count').textContent = `${vs.length} 本`;
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === smallView));
+  document.querySelectorAll('[data-only=list]').forEach(e => e.hidden = smallView !== 'list');
+  $('#small-report').hidden = smallView !== 'report'; $('#small-list').hidden = smallView !== 'list';
+  if (smallView === 'list') renderSmallList(vs); else renderReport(s, base, vs, g);
+}
+
+function renderSmallList(vs) {
   const key = $('#small-sort').value;
   const by = { ratio: v => v.ratio, views: v => v.views, vph: v => v.vph, young: v => v.channelCreatedAt ? new Date(v.channelCreatedAt).getTime() : -Infinity, fresh: v => -v.hours }[key];
   vs = vs.slice().sort((a, b) => (by(b) ?? -Infinity) - (by(a) ?? -Infinity));
-  $('#small-count').textContent = `${vs.length} 本`;
   $('#small-list').innerHTML = vs.map((v, i) => `<a class="card" href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener">
       <div class="rank">${i + 1}</div>
       <div class="thumbbox"><img class="thumb" loading="lazy" alt="" src="https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg"><span class="dur">${fmtDur(v.duration)}</span></div>
@@ -526,8 +589,137 @@ async function renderSmall() {
         <div class="stats"><span>再生 <b>${fmt(v.views)}</b></span><span>登録者比 <b>${fmtRatio(v.ratio)}倍</b></span><span>勢い <b>${fmt(v.vph)}</b>/時</span>${v.likeRate != null ? `<span>高評価 <b>${(v.likeRate * 100).toFixed(1)}%</b></span>` : ''}</div>
         <div class="stats">${v.genres.map(x => `<span class="badge streak">${esc(x)}</span>`).join('')}</div>
       </div></a>`).join('') || '<div class="empty">条件に合う動画がありません</div>';
-  const words = topCounts(vs.map(v => titleWords(v.title)), 30);
-  $('#small-words').innerHTML = words.map(([w, n]) => `<span class="word">${esc(w)}<small>${n}</small></span>`).join('') || '<span class="note">2本以上に共通する言葉はありません</span>';
+}
+
+// ---------- 分析レポート（新しいチャンネルを始める人向け） ----------
+const vlink = (v, text) => `<a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener">${text ?? esc(v.title)}</a>`;
+const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+function genreStats(vs, gameMode) {
+  const small = gameMode ? vs.filter(v => v.subs <= SMALL_LINE) : vs;
+  const st = {
+    n: vs.length, views: median(vs.map(v => v.views)), subs: median(vs.map(v => v.subs)), ratio: median(vs.map(v => v.ratio)),
+    smallN: small.length, smallViews: median(small.map(v => v.views)),
+  };
+  // 入りやすさ：小さいチャンネルの割合 × その再生数の中央値（小さいチャンネルが1本出したときに見込める再生の目安）
+  st.score = st.n && st.smallN >= 2 ? (st.smallN / st.n) * (st.smallViews || 0) : 0;
+  st.rating = st.score >= 3000 ? '◎' : st.score >= 1000 ? '○' : st.score >= 300 ? '△' : '✕';
+  return st;
+}
+// 型ごとの登録者比（中央値）。本数が少ない型は信頼できないので外す
+function patternStats(vs, minN = 3) {
+  return PATTERNS.map(([name]) => {
+    const m = vs.filter(v => patternsOf(v).includes(name));
+    return { name, n: m.length, ratio: median(m.map(v => v.ratio)), views: median(m.map(v => v.views)) };
+  }).filter(p => p.n >= minN).sort((a, b) => b.ratio - a.ratio);
+}
+function channelsOf(vs) {
+  const map = new Map();
+  for (const v of vs) {
+    const c = map.get(v.channelId) || { id: v.channelId, name: v.channelTitle, subs: v.subs, videos: v.channelVideos, created: v.channelCreatedAt, desc: v.channelDesc || '', pace: weeklyPace(v), list: [] };
+    c.list.push(v); map.set(v.channelId, c);
+  }
+  for (const c of map.values()) {
+    c.best = c.list.reduce((a, b) => (b.views > a.views ? b : a));
+    c.ratio = c.best.ratio;
+    const months = c.created ? (Date.now() - new Date(c.created).getTime()) / (30.4 * 86400e3) : 999;
+    c.mass = c.pace != null && c.pace > 5 && months < 6;         // 開設半年未満で週5本超 → AIなどで量産している可能性
+    c.expert = EXPERT_RE.test(c.desc + ' ' + c.name);
+    c.outside = c.list.every(v => patternsOf(v).some(p => p === '切り抜き'));  // 他人の配信の切り抜きが中心
+  }
+  return [...map.values()];
+}
+
+function renderReport(s, base, vs, g) {
+  const gameMode = s.profile === 'games';
+  const el = $('#small-report');
+  if (vs.length < 5) { el.innerHTML = '<div class="empty">分析するには動画が少なすぎます。絞り込みをゆるめてください。</div>'; return; }
+  const smallVs = gameMode ? vs.filter(v => v.subs <= SMALL_LINE) : vs;
+  const insights = [];
+
+  // ジャンル比較
+  const rows = s.genres.map(name => ({ name, ...genreStats(base.filter(v => v.genres.includes(name)), gameMode) })).filter(r => r.n >= 3);
+  rows.sort(gameMode ? (a, b) => b.score - a.score || b.views - a.views : (a, b) => b.ratio - a.ratio);
+  if (g === 'all' && rows.length >= 2) {
+    if (gameMode) {
+      const e = rows[0], hard = [...rows].sort((a, b) => a.score - b.score)[0];
+      insights.push(`小さいチャンネルが一番入りやすいのは<b>「${esc(e.name)}」</b>です。登録者1万人以下の動画が${e.n}本中${e.smallN}本あり、その再生数の中央値は${fmt(e.smallViews)}回（全体は${fmt(e.views)}回）。`);
+      if (hard !== e) insights.push(`<b>「${esc(hard.name)}」</b>は大手が中心で、登録者1万人以下の動画は${hard.n}本中${hard.smallN}本${hard.smallN ? `（再生中央値${fmt(hard.smallViews)}回）` : ''}でした。`);
+    } else {
+      const top = rows.filter(r => r.n >= 5)[0] || rows[0];
+      insights.push(`登録者に対して一番伸びているジャンルは<b>「${esc(top.name)}」</b>です（登録者比の中央値 ${fmtRatio(top.ratio)}倍・${top.n}本）。`);
+    }
+  }
+
+  // 伸びた動画（上位25%）に多い型・言葉
+  const sorted = [...smallVs].sort((a, b) => b.ratio - a.ratio), topQ = sorted.slice(0, Math.max(3, Math.ceil(sorted.length / 4)));
+  const lifts = PATTERNS.map(([name]) => {
+    const inTop = topQ.filter(v => patternsOf(v).includes(name)).length, inAll = smallVs.filter(v => patternsOf(v).includes(name)).length;
+    return { name, inTop, lift: inAll ? (inTop / topQ.length) / (inAll / smallVs.length) : 0 };
+  }).filter(x => x.inTop >= 3 && x.lift >= 1.2).sort((a, b) => b.lift - a.lift);
+  if (lifts[0]) insights.push(`${gameMode ? '小さいチャンネルの' : ''}伸びた動画（登録者比の上位25%）には<b>「${lifts[0].name}」型</b>が多く、全体の${lifts[0].lift.toFixed(1)}倍の割合で含まれています。`);
+  const words = topCounts(topQ.map(v => titleWords(v.title)), 6).filter(([, n]) => n >= 2).map(([w]) => `「${esc(w)}」`);
+  if (words.length) insights.push(`伸びた動画のタイトルによく出る言葉：${words.join('')}`);
+
+  // 長さ
+  const lens = LEN_BUCKETS.map(([label, a, b]) => {
+    const m = smallVs.filter(v => v.duration > a && v.duration <= b);
+    return { label, n: m.length, views: median(m.map(v => v.views)) || 0 };
+  }).filter(x => x.n > 0);
+  const okLens = lens.filter(x => x.n >= 3).sort((a, b) => b.views - a.views);
+  if (okLens.length >= 2) {
+    insights.push(`${gameMode ? '小さいチャンネルでは' : ''}<b>${okLens[0].label}</b>の動画が一番再生されています（中央値${fmt(okLens[0].views)}回・${okLens[0].n}本）。`);
+    const over = lens.find(x => x.label === '60分超'), all = median(smallVs.map(v => v.views));
+    if (over && over.n >= 3 && over.views < all * .6) insights.push(`60分を超える動画（配信アーカイブなど）は中央値${fmt(over.views)}回と伸びにくく、編集して短くするほうが有利です。`);
+    else if (over && over.n >= 3 && over.views > all * 1.2) insights.push(`60分を超える長い動画も中央値${fmt(over.views)}回と、むしろよく見られています。`);
+  }
+
+  // 当たりが出たチャンネルの規模
+  const chans = channelsOf(smallVs);
+  const hits = chans.filter(c => c.ratio >= 10 && c.videos != null);
+  if (hits.length >= 3) {
+    const mv = Math.round(median(hits.map(c => c.videos))), few = hits.filter(c => c.videos <= 15).length;
+    insights.push(`登録者の10倍以上再生された${hits.length}チャンネルの動画本数は中央値<b>${mv}本</b>。` +
+      (mv <= 20 ? '本数が少なくても、1本のテーマ選びで当たりが出ています。' : few ? `ある程度続けているチャンネルが多い一方、15本以下で当たりを出したチャンネルも${few}あります。` : 'ある程度の本数を続けているチャンネルが中心です。'));
+  }
+  const shorts = vs.filter(v => v.duration > 0 && v.duration <= 180).length;
+  if (s.profile === 'small' && $('#small-len').value === 'all') insights.push(`小さいチャンネルで伸びた動画の${pct(shorts, vs.length)}%がショート（3分以下）でした。`);
+  const massN = chans.filter(c => c.mass).length;
+  if (massN) insights.push(`開設半年未満で週5本以上投稿しているチャンネルが${massN}あります。AI音声などで量産している可能性があり、下の「参考にしたいチャンネル」からは外しています。`);
+
+  // ジャンルごとの伸びている型と例
+  const genreCards = (g === 'all' ? rows.map(r => r.name) : [g]).map(name => {
+    const gv = base.filter(v => v.genres.includes(name)), sv = gameMode ? gv.filter(v => v.subs <= SMALL_LINE) : gv;
+    if (gv.length < 5) return '';
+    const ps = patternStats(gv), st = genreStats(gv, gameMode);
+    const ex = sv.filter(v => v.views >= 3000).sort((a, b) => b.ratio - a.ratio).slice(0, 4);
+    return `<div class="panel"><h2>${esc(name)}${gameMode ? ` <span class="rating">${st.rating}</span>` : ''}</h2>
+      <p class="sub">${gv.length}本・再生中央値 ${fmt(st.views)}回${gameMode ? `・投稿者の登録者中央値 ${fmt(st.subs)}人・1万人以下 ${st.smallN}本` : `・登録者比の中央値 ${fmtRatio(st.ratio)}倍`}</p>
+      ${ps.length ? `<div class="stats" style="margin:0 0 4px">${ps.slice(0, 3).map((p, i) => `<span class="tag${i === 0 ? ' good' : ''}">${esc(p.name)} ${fmtRatio(p.ratio)}倍<small>・${p.n}本</small></span>`).join('')}</div>` : ''}
+      ${ex.length ? `<ol class="ex">${ex.map(v => `<li>${vlink(v)}<br><small>${esc(v.channelTitle)}・登録者${fmt(v.subs)}人で${fmt(v.views)}回（${fmtRatio(v.ratio)}倍）・${Math.round(v.duration / 60)}分</small></li>`).join('')}</ol>` : '<p class="note">小さいチャンネルの例はありません</p>'}
+    </div>`;
+  }).join('');
+
+  // 参考にしたいチャンネル
+  const pick = chans.filter(c => !c.mass && !c.outside && (c.videos ?? 0) >= 3 && c.best.views >= 3000)
+    .sort((a, b) => (b.expert - a.expert) || b.ratio - a.ratio).slice(0, 20);
+  const chanTable = pick.length ? `<div class="scroll"><table class="chantable"><thead><tr><th>チャンネル</th><th class="num">登録者</th><th class="num">再生</th><th class="num">動画数</th><th>代表動画</th></tr></thead><tbody>` +
+    pick.map(c => `<tr><td><a href="https://www.youtube.com/channel/${esc(c.id)}" target="_blank" rel="noopener">${esc(c.name)}</a><br>${c.expert ? '<span class="tag good">肩書き・運営元あり</span>' : ''}<small>${[age(c.created), pace(c.best)].filter(Boolean).join('・')}</small></td><td class="num">${fmt(c.subs)}</td><td class="num">${fmt(c.best.views)}</td><td class="num">${c.videos}</td><td>${vlink(c.best)}<br><small>${Math.round(c.best.duration / 60)}分・${esc(c.best.genres.join('・'))}</small></td></tr>`).join('') + '</tbody></table></div>'
+    : '<p class="note">条件に合うチャンネルはありません</p>';
+
+  const compare = rows.length >= 2 && g === 'all' ? `<div class="panel wide"><h2>ジャンルの比較</h2><p class="sub">${gameMode ? '入りやすさ＝登録者1万人以下の動画の割合 × その再生数の中央値。小さいチャンネルが1本出したときに見込める再生の目安です（◎3,000以上・○1,000以上・△300以上）。' : '登録者比＝再生数÷登録者数。高いほど、小さいチャンネルでも伸びている。'}行を押すとそのジャンルに絞り込みます</p>
+    <div class="scroll"><table><thead><tr><th>ジャンル</th><th class="num">本数</th><th class="num">再生中央値</th>${gameMode ? '<th class="num">登録者中央値</th><th class="num">1万人以下</th><th class="num">その再生中央値</th><th class="num">入りやすさ</th>' : '<th class="num">登録者比</th>'}</tr></thead><tbody>` +
+    rows.map(r => `<tr data-sgenre="${esc(r.name)}"><td>${esc(r.name)}</td><td class="num">${r.n}</td><td class="num">${fmt(r.views)}</td>${gameMode ? `<td class="num">${fmt(r.subs)}</td><td class="num">${r.smallN}</td><td class="num">${fmt(r.smallViews)}</td><td class="num rating">${r.rating}</td>` : `<td class="num">${fmtRatio(r.ratio)}倍</td>`}</tr>`).join('') + '</tbody></table></div></div>' : '';
+
+  el.innerHTML = `<div class="grid">
+    <div class="panel wide"><h2>データから見えたこと${g === 'all' ? '' : `（${esc(g)}）`}</h2><p class="sub">毎日のデータから自動でまとめています。件数が少ない項目は参考程度に見てください</p><ul class="insights">${insights.map(t => `<li>${t}</li>`).join('') || '<li>目立った傾向はありません</li>'}</ul></div>
+    ${compare}
+    <div class="panel wide"><h2>${gameMode ? '小さいチャンネル（1万人以下）の' : ''}動画の長さと再生数</h2><p class="sub">長さごとの再生数の中央値</p><div id="small-lenchart"></div></div>
+    <div class="panel wide"><h2>参考にしたいチャンネル</h2><p class="sub">動画3本以上・量産型（開設半年未満で週5本超）と切り抜き中心を除き、登録者比の高い順。「肩書き・運営元あり」はチャンネル説明に医師・講師・編集部などの記載があるもの。オリジナルかどうかは実際に動画を見て確かめてください</p>${chanTable}</div>
+  </div>
+  <h2 style="font-size:15px;margin:20px 0 0">ジャンルごとの伸びている型と例</h2>
+  <p class="note" style="margin:2px 0 0">タグは登録者比の高い動画の型（緑が一番）。例は${gameMode ? '登録者1万人以下で' : ''}登録者比の高い動画です</p>
+  <div class="grid">${genreCards}</div>`;
+  barChart($('#small-lenchart'), lens.map(x => ({ label: x.label, tip: `${x.label}（${x.n}本）`, value: Math.round(x.views) })), '回');
 }
 
 // ---------- 分析 ----------
@@ -716,7 +908,8 @@ document.addEventListener('click', e => {
   const c = e.target.closest('[data-sgenre]');
   if (c) { state.smallGenre = c.dataset.sgenre; renderSmall(); }
 });
-['#small-src', '#small-subs', '#small-len', '#small-sort'].forEach(id => $(id).onchange = renderSmall);
+['#small-src', '#small-subs', '#small-len', '#small-lang', '#small-sort'].forEach(id => $(id).onchange = renderSmall);
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => { smallView = b.dataset.view; renderSmall(); });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('.hbar')) e.target.click(); });
 document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 $('#date').onchange = () => { state.cat = 'all'; state.word = null; loadDate($('#date').value); };

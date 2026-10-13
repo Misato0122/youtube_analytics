@@ -2,11 +2,11 @@ name: データの収集
 
 on:
   schedule:
-    - cron: '7 22 * * *'   # 毎日 7:07（日本時間）に小規模チャンネルのデータを収集
+    - cron: '7 22 * * *'   # 毎日 7:07（日本時間）に小規模チャンネル2種とゲームのデータを収集（API 約8,200ユニット/日）
   workflow_dispatch:
     inputs:
       target:
-        description: '何を集めるか（small=小規模チャンネル2種, trending=急上昇, games=建築・クラフト系ゲーム, all=small+trending）'
+        description: '何を集めるか（small=小規模チャンネル2種＋ゲーム, trending=急上昇, games=ゲームだけ, all=全部）'
         type: choice
         default: small
         options: [small, trending, games, all]
@@ -43,8 +43,9 @@ jobs:
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python3 scripts/collect_small.py --profile knowledge --max-subs 5000
-      - name: 建築・クラフト系ゲームの横動画を取得（手動実行のみ）
-        if: github.event_name == 'workflow_dispatch' && inputs.target == 'games'
+      - name: 建築・クラフト系ゲームの横動画を取得
+        if: github.event_name == 'schedule' || inputs.target == 'small' || inputs.target == 'games' || inputs.target == 'all'
+        continue-on-error: true
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python3 scripts/collect_small.py --profile games --max-subs 1000000000
