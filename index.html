@@ -163,10 +163,10 @@ td a:hover { text-decoration: underline; }
     </div>
   </div>
   <nav class="tabs" role="tablist">
-    <button role="tab" data-tab="rank">ランキング</button>
+    <button role="tab" data-tab="small">小規模</button>
+    <button role="tab" data-tab="rank">急上昇</button>
     <button role="tab" data-tab="analysis">分析</button>
     <button role="tab" data-tab="history">推移</button>
-    <button role="tab" data-tab="small">小規模</button>
     <button role="tab" data-tab="settings">設定</button>
   </nav>
 </header>
@@ -270,7 +270,7 @@ td a:hover { text-decoration: underline; }
     <div class="panel" style="margin-top:12px">
       <div class="form">
         <h2 style="margin:0">今すぐ取得の設定</h2>
-        <p class="note" style="margin:0">毎日のデータは自動で集めています（日本時間 7時・19時ごろ）。<br>「今すぐ取得」を使うと、この端末から最新の急上昇をその場で取得できます。そのためには YouTube Data API のキーが必要です。</p>
+        <p class="note" style="margin:0">小規模チャンネルのデータは毎朝7時ごろに自動で集めています。急上昇ランキングは手動更新です。<br>「急上昇」タブの「今すぐ取得」を使うと、この端末から最新の急上昇をその場で取得できます。そのためには YouTube Data API のキーが必要です。</p>
         <label>YouTube Data API キー
           <input type="password" id="apikey" autocomplete="off" placeholder="AIza...">
         </label>
@@ -308,11 +308,12 @@ const fmtDur = s => {
   const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
   return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
 };
+const fmtRatio = r => r == null ? '–' : r < 10 ? r.toFixed(1) : fmt(r);
 const ago = h => h < 1 ? Math.max(1, Math.round(h * 60)) + '分前' : h < 48 ? Math.round(h) + '時間前' : Math.round(h / 24) + '日前';
 const SERIES = ['--s1', '--s2', '--s3', '--s4'];
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-const state = { index: { days: [] }, snap: null, liveSnap: null, cat: 'all', word: null, tab: store.get('tab', 'rank') };
+const state = { index: { days: [] }, snap: null, liveSnap: null, cat: 'all', word: null, tab: 'small' };
 
 // ---------- データ読み込み ----------
 async function getJSON(url) {
@@ -397,7 +398,9 @@ const jstDate = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 1
 // ---------- 共通 ----------
 function setStatus(t) { $('#status').textContent = t; }
 function setTab(t) {
-  state.tab = t; store.set('tab', t);
+  state.tab = t;
+  const trend = ['rank', 'analysis', 'history'].includes(t);
+  $('.datesel').hidden = !trend; $('#status').hidden = !trend;
   document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
   document.querySelectorAll('main > section').forEach(s => s.hidden = s.id !== 'tab-' + t);
   renderTab();
@@ -408,7 +411,7 @@ function enrich(snap) {
     v.hours = Math.max((t - new Date(v.publishedAt).getTime()) / 3600e3, 0.1);
     v.vph = v.views != null ? v.views / Math.max(v.hours, 1) : null;
     v.likeRate = v.views && v.likes != null ? v.likes / v.views : null;
-    v.ratio = v.views != null && v.subs ? v.views / v.subs : null;
+    v.ratio = v.views != null && v.subs != null ? v.views / Math.max(v.subs, 1) : null;
   }
 }
 const catName = (snap, id) => snap.categories?.[id] || state.index.categories?.[id] || 'カテゴリ' + id;
@@ -424,7 +427,7 @@ function renderAll() {
   renderTab();
 }
 function emptyState(el) {
-  el.innerHTML = `<div class="empty"><h2>まだデータがありません</h2><p>毎日の自動収集が始まると、ここに急上昇が表示されます。<br>今すぐ見たいときは「設定」で API キーを入れて「今すぐ取得」を押してください。</p></div>`;
+  el.innerHTML = `<div class="empty"><h2>まだデータがありません</h2><p>急上昇ランキングは手動更新です。<br>見たいときは「設定」で API キーを入れて「今すぐ取得」を押してください。</p></div>`;
 }
 function renderTab() {
   const t = state.tab;
@@ -465,7 +468,7 @@ function renderRank() {
       <div class="info">
         <div class="title">${badges}${esc(v.title)}</div>
         <div class="meta">${esc(v.channelTitle)} · ${esc(catName(s, v.categoryId))} · ${ago(v.hours)}</div>
-        <div class="stats"><span>再生 <b>${fmt(v.views)}</b></span><span>勢い <b>${fmt(v.vph)}</b>/時</span>${v.viewsDelta != null ? `<span>前回比 <b>${v.viewsDelta >= 0 ? '+' : ''}${fmt(v.viewsDelta)}</b></span>` : ''}${v.likeRate != null ? `<span>高評価 <b>${(v.likeRate * 100).toFixed(1)}%</b></span>` : ''}${v.ratio != null ? `<span>登録者比 <b>${v.ratio < 10 ? v.ratio.toFixed(1) : fmt(v.ratio)}倍</b></span>` : ''}</div>
+        <div class="stats"><span>再生 <b>${fmt(v.views)}</b></span><span>勢い <b>${fmt(v.vph)}</b>/時</span>${v.viewsDelta != null ? `<span>前回比 <b>${v.viewsDelta >= 0 ? '+' : ''}${fmt(v.viewsDelta)}</b></span>` : ''}${v.likeRate != null ? `<span>高評価 <b>${(v.likeRate * 100).toFixed(1)}%</b></span>` : ''}${v.ratio != null ? `<span>登録者比 <b>${fmtRatio(v.ratio)}倍</b></span>` : ''}</div>
       </div></a>`;
   }).join('') || '<div class="empty">該当する動画がありません</div>';
 }
@@ -486,13 +489,12 @@ const pace = v => {
 async function renderSmall() {
   const src = $('#small-src').value;
   if (!(src in smallData)) {
-    smallData[src] = null;
     $('#small-note').textContent = '読み込み中…';
     $('#small-list').innerHTML = $('#small-genres').innerHTML = $('#small-words').innerHTML = '';
-    try { smallData[src] = await getJSON(`data/${src}/latest.json`); enrich(smallData[src]); } catch {}
-    if ($('#small-src').value !== src) return;
+    smallData[src] = getJSON(`data/${src}/latest.json`).then(d => (enrich(d), d)).catch(() => null);
   }
-  const s = smallData[src];
+  const s = await smallData[src];
+  if ($('#small-src').value !== src) return;
   if (!s) {
     $('#small-note').innerHTML = 'まだデータがありません。毎朝7時ごろに自動で集めます。';
     $('#small-list').innerHTML = $('#small-genres').innerHTML = $('#small-words').innerHTML = '';
@@ -501,7 +503,7 @@ async function renderSmall() {
   if (state.smallGenre !== 'all' && !s.genres.includes(state.smallGenre)) state.smallGenre = 'all';
   const when = new Date(s.fetchedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   $('#small-note').textContent = `${when} 時点。ジャンル別のキーワードで直近${s.days}日に公開された${s.minDuration ? Math.round(s.minDuration / 60) + '分以上の' : ''}動画を再生数の多い順に検索し（${s.searched}本）、${s.maxSubs < 1e8 ? `登録者${s.maxSubs.toLocaleString()}人以下のチャンネルだけを取り出しています。` : ''}` +
-    (s.profile === 'knowledge' ? '「切り抜き」「反応集」「海外の反応」などは除いています。投稿ペースが極端に多いチャンネルは、AIで量産している可能性があります。' : '急上昇には載らない「小さくても伸びた動画」です。');
+    ({ knowledge: '「切り抜き」「反応集」「海外の反応」などは除いています。投稿ペースが極端に多いチャンネルは、AIで量産している可能性があります。', games: '大手も含みます。登録者で絞り込めます。' }[s.profile] ?? '急上昇には載らない「小さくても伸びた動画」です。');
   const maxSubs = +$('#small-subs').value, len = $('#small-len').value, g = state.smallGenre || 'all';
   let vs = s.videos.filter(v => v.subs <= maxSubs && (len === 'all' || (len === 'short') === (v.duration > 0 && v.duration <= 180)));
   const counts = {};
@@ -518,10 +520,10 @@ async function renderSmall() {
       <div class="thumbbox"><img class="thumb" loading="lazy" alt="" src="https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg"><span class="dur">${fmtDur(v.duration)}</span></div>
       <div class="info">
         <div class="title">${esc(v.title)}</div>
-        <div class="meta">${esc(v.channelTitle)} · 登録者 ${v.subs.toLocaleString()}人</div>
+        <div class="meta">${esc(v.channelTitle)} · 登録者 ${v.subs?.toLocaleString() ?? '非公開'}人</div>
         <div class="meta">${[age(v.channelCreatedAt), v.channelVideos != null ? `動画${v.channelVideos.toLocaleString()}本` : '', pace(v), ago(v.hours)].filter(Boolean).join(' · ')}</div>
         ${v.channelDesc ? `<div class="meta" title="${esc(v.channelDesc)}">${esc(v.channelDesc)}</div>` : ''}
-        <div class="stats"><span>再生 <b>${fmt(v.views)}</b></span><span>登録者比 <b>${v.ratio < 10 ? v.ratio.toFixed(1) : fmt(v.ratio)}倍</b></span><span>勢い <b>${fmt(v.vph)}</b>/時</span>${v.likeRate != null ? `<span>高評価 <b>${(v.likeRate * 100).toFixed(1)}%</b></span>` : ''}</div>
+        <div class="stats"><span>再生 <b>${fmt(v.views)}</b></span><span>登録者比 <b>${fmtRatio(v.ratio)}倍</b></span><span>勢い <b>${fmt(v.vph)}</b>/時</span>${v.likeRate != null ? `<span>高評価 <b>${(v.likeRate * 100).toFixed(1)}%</b></span>` : ''}</div>
         <div class="stats">${v.genres.map(x => `<span class="badge streak">${esc(x)}</span>`).join('')}</div>
       </div></a>`).join('') || '<div class="empty">条件に合う動画がありません</div>';
   const words = topCounts(vs.map(v => titleWords(v.title)), 30);
@@ -593,7 +595,7 @@ function renderHistory() {
   const el = $('#tab-history');
   if (days.length < 2) {
     if (!el.querySelector('.empty')) { el.dataset.html ??= el.innerHTML; }
-    el.innerHTML = `<div class="empty"><h2>推移を見るには2日分以上のデータが必要です</h2><p>今は ${days.length} 日分です。毎日自動で集めているので、明日以降に表示されます。</p></div>`;
+    el.innerHTML = `<div class="empty"><h2>推移を見るには2日分以上のデータが必要です</h2><p>今は ${days.length} 日分です。急上昇は手動更新のため、GitHub で収集を実行した日の分だけたまります。</p></div>`;
     return;
   }
   if (el.dataset.html) { el.innerHTML = el.dataset.html; delete el.dataset.html; bindTabControls(); }
@@ -730,7 +732,7 @@ document.addEventListener('scroll', hideTip, { passive: true });
 
 (async () => {
   bindTabControls();
-  setTab(['rank', 'analysis', 'history', 'small', 'settings'].includes(state.tab) ? state.tab : 'rank');
+  setTab('small');
   await loadIndex();
   const last = state.index.days.at(-1)?.date;
   if (last) await loadDate(last);

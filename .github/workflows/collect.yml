@@ -1,16 +1,15 @@
-name: 急上昇データの収集
+name: データの収集
 
 on:
   schedule:
-    - cron: '7 22 * * *'   # 毎日 7:07（日本時間）
-    - cron: '7 10 * * *'   # 毎日 19:07（日本時間）。同じ日のデータは上書き
+    - cron: '7 22 * * *'   # 毎日 7:07（日本時間）に小規模チャンネルのデータを収集
   workflow_dispatch:
     inputs:
       target:
-        description: '何を集めるか'
+        description: '何を集めるか（small=小規模チャンネル2種, trending=急上昇, games=建築・クラフト系ゲーム, all=small+trending）'
         type: choice
-        default: all
-        options: [all, trending, small, knowledge, games]
+        default: small
+        options: [small, trending, games, all]
 
 permissions:
   contents: write
@@ -28,18 +27,18 @@ jobs:
         with:
           python-version: '3.12'
       - name: 急上昇を取得
-        if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'trending'
+        if: github.event_name == 'workflow_dispatch' && (inputs.target == 'trending' || inputs.target == 'all')
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python3 scripts/collect.py --region JP
-      - name: 小規模チャンネルの伸びている動画を取得（1日1回）
-        if: (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'small')) || github.event.schedule == '7 22 * * *'
+      - name: 小規模チャンネルの伸びている動画を取得
+        if: github.event_name == 'schedule' || inputs.target == 'small' || inputs.target == 'all'
         continue-on-error: true
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python3 scripts/collect_small.py --profile general --max-subs 5000
-      - name: 知識・解説系の横動画（小規模チャンネル）を取得（1日1回）
-        if: (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'knowledge')) || github.event.schedule == '7 22 * * *'
+      - name: 知識・解説系の横動画（小規模チャンネル）を取得
+        if: github.event_name == 'schedule' || inputs.target == 'small' || inputs.target == 'all'
         continue-on-error: true
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
