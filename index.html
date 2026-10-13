@@ -166,6 +166,7 @@ td a:hover { text-decoration: underline; }
     <button role="tab" data-tab="rank">ランキング</button>
     <button role="tab" data-tab="analysis">分析</button>
     <button role="tab" data-tab="history">推移</button>
+    <button role="tab" data-tab="small">小規模</button>
     <button role="tab" data-tab="settings">設定</button>
   </nav>
 </header>
@@ -221,6 +222,38 @@ td a:hover { text-decoration: underline; }
       </div>
       <div class="panel wide"><h2>カテゴリ別の本数の推移</h2><p class="sub">本数の多い上位4カテゴリ</p><div id="catline"></div></div>
       <div class="panel wide"><h2>長く急上昇に残っている動画</h2><p class="sub">表示中の日付の時点で、連続して入っている日数</p><div id="longrun"></div></div>
+    </div>
+  </section>
+
+  <section id="tab-small" hidden>
+    <p class="note" id="small-note" style="margin:12px 0 0"></p>
+    <div class="chips" id="small-genres"></div>
+    <div class="toolbar">
+      <label>登録者
+        <select id="small-subs">
+          <option value="5000">5000人以下</option><option value="3000">3000人以下</option><option value="1000">1000人以下</option>
+        </select>
+      </label>
+      <label>長さ
+        <select id="small-len">
+          <option value="all">すべて</option><option value="short">3分以下</option><option value="long">3分超</option>
+        </select>
+      </label>
+      <span class="grow"></span>
+      <span id="small-count"></span>
+      <label>並び替え
+        <select id="small-sort">
+          <option value="ratio">登録者比（再生÷登録者）</option>
+          <option value="views">再生数</option>
+          <option value="vph">勢い（1時間あたり再生）</option>
+          <option value="young">チャンネルが新しい順</option>
+          <option value="fresh">公開が新しい順</option>
+        </select>
+      </label>
+    </div>
+    <div class="list" id="small-list"></div>
+    <div class="grid">
+      <div class="panel wide"><h2>伸びている小規模動画のタイトルによく出る言葉</h2><p class="sub">絞り込み中の動画が対象。何本のタイトルに含まれるか</p><div class="words" id="small-words"></div></div>
     </div>
   </section>
 
@@ -388,6 +421,7 @@ function renderTab() {
   const t = state.tab;
   if (t === 'settings') return;
   if (t === 'history') return renderHistory();
+  if (t === 'small') return renderSmall();
   const s = state.snap, el = $('#tab-' + t);
   if (!s) { if (!el.querySelector('.empty')) { el.dataset.html ??= el.innerHTML; emptyState(el); } return; }
   if (el.dataset.html) { el.innerHTML = el.dataset.html; delete el.dataset.html; bindTabControls(); }
@@ -425,6 +459,50 @@ function renderRank() {
         <div class="stats"><span>再生 <b>${fmt(v.views)}</b></span><span>勢い <b>${fmt(v.vph)}</b>/時</span>${v.viewsDelta != null ? `<span>前回比 <b>${v.viewsDelta >= 0 ? '+' : ''}${fmt(v.viewsDelta)}</b></span>` : ''}${v.likeRate != null ? `<span>高評価 <b>${(v.likeRate * 100).toFixed(1)}%</b></span>` : ''}${v.ratio != null ? `<span>登録者比 <b>${v.ratio < 10 ? v.ratio.toFixed(1) : fmt(v.ratio)}倍</b></span>` : ''}</div>
       </div></a>`;
   }).join('') || '<div class="empty">該当する動画がありません</div>';
+}
+
+// ---------- 小規模チャンネル ----------
+const age = iso => {
+  if (!iso) return '';
+  const m = (Date.now() - new Date(iso).getTime()) / (30.4 * 86400e3);
+  return m < 1 ? '開設1か月未満' : m < 12 ? `開設${Math.floor(m)}か月` : `開設${Math.floor(m / 12)}年`;
+};
+async function renderSmall() {
+  if (state.small === undefined) {
+    state.small = null;
+    $('#small-note').textContent = '読み込み中…';
+    try { state.small = await getJSON('data/small/latest.json'); enrich(state.small); } catch {}
+  }
+  const s = state.small;
+  if (!s) {
+    $('#small-note').innerHTML = 'まだデータがありません。毎朝7時ごろに自動で集めます。';
+    return;
+  }
+  const when = new Date(s.fetchedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  $('#small-note').textContent = `${when} 時点。ジャンル別のキーワードで直近${s.days}日に公開された動画を再生数の多い順に検索し（${s.searched}本）、登録者${s.maxSubs.toLocaleString()}人以下のチャンネルだけを取り出しています。急上昇には載らない「小さくても伸びた動画」です。`;
+  const maxSubs = +$('#small-subs').value, len = $('#small-len').value, g = state.smallGenre || 'all';
+  let vs = s.videos.filter(v => v.subs <= maxSubs && (len === 'all' || (len === 'short') === (v.duration > 0 && v.duration <= 180)));
+  const counts = {};
+  vs.forEach(v => v.genres.forEach(x => counts[x] = (counts[x] || 0) + 1));
+  $('#small-genres').innerHTML = `<button class="chip" data-sgenre="all" aria-pressed="${g === 'all'}">すべて<small>${vs.length}</small></button>` +
+    s.genres.filter(x => counts[x]).map(x => `<button class="chip" data-sgenre="${esc(x)}" aria-pressed="${g === x}">${esc(x)}<small>${counts[x]}</small></button>`).join('');
+  if (g !== 'all') vs = vs.filter(v => v.genres.includes(g));
+  const key = $('#small-sort').value;
+  const by = { ratio: v => v.ratio, views: v => v.views, vph: v => v.vph, young: v => v.channelCreatedAt ? new Date(v.channelCreatedAt).getTime() : -Infinity, fresh: v => -v.hours }[key];
+  vs = vs.slice().sort((a, b) => (by(b) ?? -Infinity) - (by(a) ?? -Infinity));
+  $('#small-count').textContent = `${vs.length} 本`;
+  $('#small-list').innerHTML = vs.map((v, i) => `<a class="card" href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener">
+      <div class="rank">${i + 1}</div>
+      <div class="thumbbox"><img class="thumb" loading="lazy" alt="" src="https://i.ytimg.com/vi/${esc(v.id)}/mqdefault.jpg"><span class="dur">${fmtDur(v.duration)}</span></div>
+      <div class="info">
+        <div class="title">${esc(v.title)}</div>
+        <div class="meta">${esc(v.channelTitle)} · 登録者 ${v.subs.toLocaleString()}人</div>
+        <div class="meta">${[age(v.channelCreatedAt), v.channelVideos != null ? `動画${v.channelVideos.toLocaleString()}本` : '', ago(v.hours)].filter(Boolean).join(' · ')}</div>
+        <div class="stats"><span>再生 <b>${fmt(v.views)}</b></span><span>登録者比 <b>${v.ratio < 10 ? v.ratio.toFixed(1) : fmt(v.ratio)}倍</b></span><span>勢い <b>${fmt(v.vph)}</b>/時</span>${v.likeRate != null ? `<span>高評価 <b>${(v.likeRate * 100).toFixed(1)}%</b></span>` : ''}</div>
+        <div class="stats">${v.genres.map(x => `<span class="badge streak">${esc(x)}</span>`).join('')}</div>
+      </div></a>`).join('') || '<div class="empty">条件に合う動画がありません</div>';
+  const words = topCounts(vs.map(v => titleWords(v.title)), 30);
+  $('#small-words').innerHTML = words.map(([w, n]) => `<span class="word">${esc(w)}<small>${n}</small></span>`).join('') || '<span class="note">2本以上に共通する言葉はありません</span>';
 }
 
 // ---------- 分析 ----------
@@ -609,6 +687,11 @@ document.addEventListener('click', e => {
   const w = e.target.closest('[data-word]');
   if (w) { state.word = w.dataset.word || null; if (state.word) state.cat = 'all'; if (state.tab !== 'rank') setTab('rank'); else renderRank(); scrollTo(0, 0); }
 });
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-sgenre]');
+  if (c) { state.smallGenre = c.dataset.sgenre; renderSmall(); }
+});
+['#small-subs', '#small-len', '#small-sort'].forEach(id => $(id).onchange = renderSmall);
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('.hbar')) e.target.click(); });
 document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 $('#date').onchange = () => { state.cat = 'all'; state.word = null; loadDate($('#date').value); };
@@ -624,7 +707,7 @@ document.addEventListener('scroll', hideTip, { passive: true });
 
 (async () => {
   bindTabControls();
-  setTab(['rank', 'analysis', 'history', 'settings'].includes(state.tab) ? state.tab : 'rank');
+  setTab(['rank', 'analysis', 'history', 'small', 'settings'].includes(state.tab) ? state.tab : 'rank');
   await loadIndex();
   const last = state.index.days.at(-1)?.date;
   if (last) await loadDate(last);

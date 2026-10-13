@@ -25,12 +25,18 @@ jobs:
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python3 scripts/collect.py --region JP
+      - name: 小規模チャンネルの伸びている動画を取得（1日1回）
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '7 22 * * *'
+        continue-on-error: true
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python3 scripts/collect_small.py --max-subs 5000 --days 7
       - name: データを保存
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           git add data
           if git diff --cached --quiet; then echo "変更なし"; exit 0; fi
-          git commit -m "data: $(TZ=Asia/Tokyo date +%F) の急上昇"
+          git commit -m "data: $(TZ=Asia/Tokyo date +%F) のデータ"
           git pull --rebase origin "${GITHUB_REF_NAME}"
           git push
