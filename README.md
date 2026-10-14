@@ -14,7 +14,7 @@
 |---|---|
 | `index.html` | アプリ本体（GitHub Pages で公開） |
 | `scripts/collect.py` | YouTube Data API で急上昇（最大200本）を取得し `data/` に保存 |
-| `.github/workflows/collect.yml` | 毎日 7:07（日本時間）に `collect_small.py`（小規模チャンネル2種とゲーム系）を実行してデータをコミット。急上昇（`collect.py`）は Actions の Run workflow から手動実行 |
+| `.github/workflows/collect.yml` | 毎日 7:07（日本時間）に `collect_small.py`（小規模チャンネル2種とゲーム系）を実行してデータをコミット。API の上限などで取れなかった分は 17:07 に自動でやり直す（取れていれば何もしない）。失敗があると Actions 上で赤く表示される。急上昇（`collect.py`）は Actions の Run workflow から手動実行 |
 | `scripts/collect_small.py` | ジャンル別に直近7日の人気動画を検索し、登録者5000人以下だけを `data/small/` に保存。`--profile knowledge` で知識・解説系の横動画を `data/knowledge/` に保存（各1日1回・約3,000ユニット） |
 | `data/YYYY-MM-DD.json` | その日のスナップショット |
 | `data/index.json` | 日付一覧と日ごとの集計（推移グラフ用） |

@@ -9,7 +9,7 @@
   data/latest.json      最新のスナップショット
   data/index.json       日付の一覧と日ごとの集計（推移グラフ用）
 """
-import argparse, json, os, re, sys, urllib.parse, urllib.request
+import argparse, json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timedelta, timezone
 
 API = 'https://www.googleapis.com/youtube/v3/'
@@ -17,10 +17,22 @@ JST = timezone(timedelta(hours=9))
 MAX_TAGS = 15
 
 
-def api_get(endpoint, params, key):
+def api_get(endpoint, params, key, retries=3):
     q = urllib.parse.urlencode({**params, 'key': key})
-    with urllib.request.urlopen(f'{API}{endpoint}?{q}', timeout=30) as r:
-        return json.load(r)
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(f'{API}{endpoint}?{q}', timeout=30) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode('utf-8', 'replace')
+            # 1日の上限超過はやり直しても無駄なので、わかりやすいメッセージで止める
+            if 'quota' in body.lower():
+                sys.exit(f'YouTube API の1日の上限を超えました（{e.code}）。日本時間16〜17時ごろにリセットされます')
+            # 一時的な混雑（429）やサーバーエラーは少し待ってやり直す
+            if (e.code == 429 or e.code >= 500) and attempt < retries:
+                time.sleep(10 * 2 ** attempt)
+                continue
+            sys.exit(f'YouTube API エラー {e.code}: {body[:300]}')
 
 
 def parse_duration(s):

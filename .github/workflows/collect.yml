@@ -3,6 +3,7 @@ name: データの収集
 on:
   schedule:
     - cron: '7 22 * * *'   # 毎日 7:07（日本時間）に小規模チャンネル2種とゲームのデータを収集（API 約8,200ユニット/日）
+    - cron: '7 8 * * *'    # 毎日 17:07（日本時間）。API の上限がリセットされた後のやり直し。朝に取れていれば何もしない
   workflow_dispatch:
     inputs:
       target:
@@ -32,23 +33,29 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python3 scripts/collect.py --region JP
       - name: 小規模チャンネルの伸びている動画を取得
+        id: small
         if: github.event_name == 'schedule' || inputs.target == 'small' || inputs.target == 'all'
         continue-on-error: true
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python3 scripts/collect_small.py --profile general --max-subs 5000
+          SKIP: ${{ github.event_name == 'schedule' && '--skip-if-done' || '' }}
+        run: python3 scripts/collect_small.py --profile general --max-subs 5000 $SKIP
       - name: 知識・解説系の横動画（小規模チャンネル）を取得
+        id: knowledge
         if: github.event_name == 'schedule' || inputs.target == 'small' || inputs.target == 'all'
         continue-on-error: true
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python3 scripts/collect_small.py --profile knowledge --max-subs 5000
+          SKIP: ${{ github.event_name == 'schedule' && '--skip-if-done' || '' }}
+        run: python3 scripts/collect_small.py --profile knowledge --max-subs 5000 $SKIP
       - name: 建築・クラフト系ゲームの横動画を取得
+        id: games
         if: github.event_name == 'schedule' || inputs.target == 'small' || inputs.target == 'games' || inputs.target == 'all'
         continue-on-error: true
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python3 scripts/collect_small.py --profile games --max-subs 1000000000
+          SKIP: ${{ github.event_name == 'schedule' && '--skip-if-done' || '' }}
+        run: python3 scripts/collect_small.py --profile games --max-subs 1000000000 $SKIP
       - name: データを保存
         run: |
           git config user.name "github-actions[bot]"
@@ -58,3 +65,9 @@ jobs:
           git commit -m "data: $(TZ=Asia/Tokyo date +%F) のデータ"
           git pull --rebase origin "${GITHUB_REF_NAME}"
           git push
+      # 途中の失敗で他の収集や保存が止まらないよう continue-on-error にしているため、最後にまとめて失敗を知らせる
+      - name: 失敗した収集があれば知らせる
+        if: steps.small.outcome == 'failure' || steps.knowledge.outcome == 'failure' || steps.games.outcome == 'failure'
+        run: |
+          echo "::error::収集に失敗したものがあります（小規模: ${{ steps.small.outcome }} / 知識系: ${{ steps.knowledge.outcome }} / ゲーム: ${{ steps.games.outcome }}）。成功した分は保存済みです。上限超過なら17時ごろの自動やり直しで取得されます"
+          exit 1

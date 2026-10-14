@@ -104,6 +104,7 @@ def main():
     ap.add_argument('--days', type=int, help='直近何日の動画を探すか')
     ap.add_argument('--pages', type=int, help='1ジャンルあたりの検索ページ数（1ページ50件・100ユニット）')
     ap.add_argument('--data-dir')
+    ap.add_argument('--skip-if-done', action='store_true', help='今日のデータがすでにあれば何もしない（やり直し実行用）')
     a = ap.parse_args()
     prof = PROFILES[a.profile]
     a.days = a.days or prof['days']
@@ -113,6 +114,9 @@ def main():
     if not key:
         sys.exit('YOUTUBE_API_KEY が設定されていません')
     os.makedirs(a.data_dir, exist_ok=True)
+    if a.skip_if_done and os.path.exists(os.path.join(a.data_dir, datetime.now(JST).strftime('%Y-%m-%d') + '.json')):
+        print('今日のデータは取得済みのため、何もしません')
+        return
 
     now = datetime.now(JST)
     after = (now - timedelta(days=a.days)).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
